@@ -1,0 +1,1507 @@
+---
+title: "Figure 2 UMAP Making"
+author: "Jonathan Chin Cheong"
+date: "2024-10-21"
+output: html_document
+---
+
+```{r}
+set.seed(123)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 1-2")
+```
+
+```{r pressure, echo=FALSE}
+#Load Libraries
+library(Seurat)
+library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(Rfast2)
+library(viridis)
+library(scCustomize)
+library(harmony)
+library(nichenetr)
+library(khroma)
+```
+
+Load Data Sets
+
+```{r}
+alldata = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Skin Wound Healing Atlas/IntegratedMultimodal_FineCellTypes_061225.rds")
+```
+
+```{r}
+library(colorspace)
+
+metacluster_groups <- list(
+  "IFE Keratinocytes" = c("Basal II", "Basal III", "Basal IV", "uHF I", "uHF II", 
+                          "Spinous I", "Spinous II", "Spinous III", "Spinous IV", "Cornified", 
+                          "Ker.Cycling I", "Ker.Cycling II", "Ker.Cycling III"),
+  
+  "HF Keratinocytes" = c("IRS I", "IRS II", "Medulla", "Cortex I", "Cortex II" ,"Outer Bulge I", 
+                         "Outer Bulge II", "Outer Bulge III", "HF I", "HF II"),
+  
+  "Sebocytes" = c("Transitional Basal Cells", "Sebocyte II", "Sebocyte I", "Sebocyte III"),
+  
+  "Fibroblasts" = c("Papillary I", "Papillary II", "Papillary III", "Papillary IV",
+                    "Reticular I", "Reticular II", "Reticular III", "Reticular IV", "Reticular V",
+                    "Fascia", "Myofibroblasts I", "Myofibroblasts II", "Myofibroblasts III",
+                    "Lef1+ Fibroblasts", "Tnc+ Fibroblasts", "Myoc+ Fibroblasts", "Lox+ Fibroblasts","Nfkb+ Fibroblasts"),
+  
+  "Immune cells" = c("Monocytes I", "Monocytes II", "Monocytes III", 
+                     "Macrophages I", "Macrophages II", "Macrophages III", "Macrophages IV", 
+                     "Cycling Macrophages", "OC-like cells", "moDCs", "cDC1", "cDC2", 
+                     "Migratory DCs", "Langerhans cells", "pDCs", "Neutrophils I", 
+                     "Neutrophils II", "Neutrophils III", "Basophils", "Mast cells", "NK cells", 
+                     "γδT cells", "T cells", "Tregs", "ILCs","B cells"),
+  
+  "Endothelial cells" = c( "Tacr1+ ECs", "Capillary ECs", "Mature ECs", "LEC I", 
+                          "LEC II", "Artery ECs", "Proliferating ECs", "Progenitor ECs", 
+                          "EC I", "EC II", "Vein ECs", "PVMs", "Proliferating LECs", "LEC III", "EC III","VWF-hi ECs"
+                          ),
+  
+  "Pericytes" = c("Pericytes", "VSMCs", "Pericyte I", "Pericyte II", "Pericyte III","Pericyte IV"),
+  
+  "Muscle cells" = c("Muscle Progenitors", "Myonuclei", "Skeletal Muscle"),
+  
+  "Schwann cells" = c("Myelinating SC I", "Myelinating SC II", 
+                      "Repair SC I", "Repair SC II","Repair SC III"),
+  
+  "Melanocytes" = c("Oca2- Melanocytes", "Oca2-lo Melanocytes","Oca2+ Melanocytes"),
+  
+  "Adipocytes" = c("Adipocyte I", "Adipocyte II"),
+  
+  "Red Blood Cells" = c("Red Blood Cells")
+)
+
+
+# Your metacluster colors and subcluster counts
+metacluster_colors <- c(
+  "IFE Keratinocytes" = "#364B9A",
+  "HF Keratinocytes"  = "#56B4E9",
+  "Sebocytes"         = "#8DD3C7",
+  "Fibroblasts"       = "indianred2",
+  "Immune cells"      = "#198F1B",
+  "Endothelial cells" = "#F6C800",
+  "Pericytes"         = "#D12E82",
+  "Muscle cells"            = "orange2",
+  "Schwann cells"     = "purple",
+  "Melanocytes"       = "pink1",
+  "Adipocytes"        = "deeppink",
+  "Red Blood Cells"   = "#A7222B"
+)
+
+
+
+fine_colors <- list()
+
+for (meta in names(metacluster_groups)) {
+  num_celltypes <- length(metacluster_groups[[meta]])
+  
+  # Generate a perceptually distinct palette around the base color
+  pal <- colorway::build_palette(
+    central_color = metacluster_colors[[meta]],
+    n_colors = num_celltypes,
+    hue_range = 0.2,  # optional: narrow hue range for better consistency
+    val_range = 0.4,  # adjust value range
+    sat_range = -0.3  # adjust saturation
+  )
+  
+  # Assign color vector to the names of subclusters in this metacluster
+  names(pal$palette) <- metacluster_groups[[meta]]
+  fine_colors[[meta]] <- pal$palette
+}
+
+# Combine all subcluster color mappings into a single named vector
+color_palette <- unlist(fine_colors)
+names(color_palette) <- sub("^[^.]+\\.", "", names(color_palette))
+
+color_palette
+color_palette["Skeletal Muscle"] <- "#FF6600"
+color_palette["Papillary I"]        <- "#A66C8F"
+color_palette["Papillary II"]       <- "#B178A8"
+color_palette["Papillary III"]      <- "#A04B72"
+color_palette["Papillary IV"]       <- "#8C2B5D"
+color_palette["Reticular I"]        <- "#BD5B99"
+color_palette["Reticular II"]       <- "#D1647A"
+color_palette["Reticular III"]      <- "#E07682"
+color_palette["Reticular IV"]       <- "#9B3040"  # a vivid dark red
+color_palette["Reticular V"]        <- "#6B1E28"  # deeper, more burgundy/maroon
+color_palette["Fascia"]              <- "#E37471"
+color_palette["Myofibroblasts I"]   <- "#A74337"
+color_palette["Myofibroblasts II"]  <- "#B85D4A"
+color_palette["Myofibroblasts III"] <- "#FFAC90"
+color_palette["Lef1+ Fibroblasts"]  <- "#BC6C45"
+color_palette["Tnc+ Fibroblasts"]   <- "#6A4F2A"
+color_palette["Myoc+ Fibroblasts"]  <- "#E3A571"
+color_palette["Lox+ Fibroblasts"]   <- "#D49F63"
+color_palette["Nfkb+ Fibroblasts"]  <- "#A97132"
+
+# Pericytes updates (cooler purples and distinct greens)
+color_palette["Pericytes"]       <- "#A7DD0B"
+color_palette["VSMCs"]           <- "#A2E813"
+color_palette["Pericyte I"]      <- "#8669B8" # deep dark purple, slightly desaturated
+color_palette["Pericyte II"]     <- "#5E3490"  # rich medium purple, balanced saturation
+color_palette["Pericyte III"]    <- "#3A1A65" # soft medium-light purple, lighter brightness
+color_palette["Pericyte IV"]     <- "#B8A3DA"  # pale pastel purple, low saturation for contrast
+#3A1A65"
+
+color_palette["Adipocyte I"]   <- "#FF1493"  # Deep Pink  
+color_palette["Adipocyte II"]  <- "#FF69B4"  # Hot Pink  
+color_palette["Myelinating SC I"]   <- "#9C27B0"  # Bright Purple  
+color_palette["Myelinating SC II"]  <- "#BE4FD9"  # Electric Purple  
+color_palette["Repair SC I"]        <- "#D18EFF"  # Neon Lavender  
+color_palette["Repair SC II"]       <- "#E6B3FF"  # Soft Bright Lavender  
+color_palette["Repair SC III"]      <- "#A63FCC"  # Vivid Purple  
+
+Idents(alldata) <- "celltype_fine"
+# 5. Now, use this palette in your plots
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca") + custom_theme
+ggsave("UMAPwithLedgend.png", height = 11, width = 15)
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca", raster =F) & NoLegend() +custom_theme
+ggsave("UMAPGLoabalBlank.png", height = 11, width = 11)
+
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca", label = T, repel = T, label.size = 3, raster = F) & NoLegend() &custom_theme
+ggsave("UMAPwithOutLedgendWithLabels.png", height = 11, width = 11)
+
+saveRDS(color_palette, file = "color_palette.rds")
+
+alldata <- subset(alldata, subset = orig.ident %in% c("UW_Han", "UW_Joost_1", "UW_Joost_2", "UW_Joost_3"), invert = T)
+
+
+color_palette <- readRDS("color_palette.rds")
+```
+
+MakeUMAPS for Figure 1
+
+```{r}
+
+Idents(alldata) <- alldata$celltype_fine
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca", raster =F) & NoLegend() + NoAxes() + customtheme
+ggsave("UMAPofFineCellTypeAnnotationsNoLabels.svg", width = 6, height = 6)
+ggsave("UMAPofFineCellTypeAnnotationsNoLabels.png", width = 6, height = 6)
+
+
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca", raster =F, split.by = "condition") & NoLegend() + NoAxes() + customtheme
+ggsave("UMAPofFineCellTypeSplitbyCondition.svg", width = 12, height = 6)
+ggsave("UMAPofFineCellTypeSplitbyCondition.png", width = 12, height = 6)
+
+alldata@meta.data$condition <- ifelse(
+  alldata@meta.data$timepoint == "UW", 
+  "Unwounded", 
+  "Wounded"
+)
+
+
+
+Idents(alldata) <- alldata$metaclusters
+
+metacluster_colors <- c(
+  "IFE Keratinocytes" = "#364B9A",
+  "HF Keratinocytes"  = "#56B4E9",
+  "Sebocytes"         = "#8DD3C7",
+  "Fibroblasts"       = "indianred2",
+  "Immune cells"      = "#198F1B",
+  "Endothelial cells" = "#F6C800",
+  "Pericytes"         = "#D12E82",
+  "Muscle cells"            = "orange2",
+  "Schwann cells"     = "purple",
+  "Melanocytes"       = "pink1",
+  "Adipocytes"        = "deeppink",
+  "Red Blood Cells"   = "#A7222B"
+)
+
+
+levels(alldata$timepoint) <- c("UWO", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW")
+
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca", raster =F, split.by = "condition") & NoLegend() + NoAxes() + customtheme
+ggsave("UMAPofFineCellTypeSplitbyConditionNoLegend.png", width = 12, height = 6)
+
+
+```
+
+
+```{r}
+# Set target number of cells per condition
+target_n <- 43686
+
+# Downsample cells per condition
+set.seed(1234)  # For reproducibility
+
+downsampled_cells <- alldata@meta.data %>%
+  dplyr::mutate(cell_id = rownames(.)) %>%
+  dplyr::group_by(condition) %>%
+  dplyr::slice_sample(n = target_n) %>%
+  dplyr::pull(cell_id)
+
+# Subset Seurat object
+alldata_ds <- subset(alldata, cells = downsampled_cells)
+
+# Plot
+p <- DimPlot(
+  alldata_ds,
+  cols = color_palette,
+  reduction = "umap.rpca",
+  raster = FALSE,
+  split.by = "condition"
+) & NoLegend() + NoAxes() + customtheme
+
+# Save
+ggsave("UMAPofFineCellTypeSplitbyConditionDownSampledNoLegend.png", plot = p, width = 12, height = 6)
+```
+
+
+
+
+
+```{r}
+VlnPlot(alldata, "percent_mito", group.by = modality)
+```
+
+```{r}
+library(dplyr)
+#Add new modality group 
+alldata$modality_group <- ifelse(alldata$modality %in% c("scRNAseq", "CITEseq"), "whole cell", "nuclei")
+
+# Add a new metadata column called 'condition' based on 'timepoint'
+alldata@meta.data <- alldata@meta.data %>%
+  mutate(condition = case_when(
+    timepoint == "UW" ~ "Unwounded",
+    timepoint %in% c("D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW") ~ "Wounded",
+    TRUE ~ as.character(timepoint)  # Keeps any other potential values unchanged
+  ))
+```
+
+```{r}
+cols = c("springgreen2", "orange2", "steelblue2")
+
+p <- VlnPlot(alldata, 
+             features = c("nFeature_RNA", "percent_mito", "percent_ribo", "TF Percentage"), 
+             cols = cols, 
+             group.by = "modality", 
+             pt.size = 0)
+
+# Customize the font
+p <- p & theme(
+  text = element_text(family = "Arial", face = "bold", size = 11),
+  axis.text = element_text(family = "Arial", face = "bold", size = 11),
+  axis.title = element_text(family = "Arial", face = "bold", size = 11),
+  legend.text = element_text(family = "Arial", face = "bold", size = 11),
+  legend.title = element_text(family = "Arial", face = "bold", size = 11)
+)
+
+# Display the plot
+p
+
+ggsave("QualityControlofModalities.png", height = 6, width = 7)
+
+
+DimPlot(alldata, group.by = "orig.ident", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupByBatch.png", height = 6, width = 7)
+
+DimPlot(alldata, group.by = "timepoint", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupByTimepoint.png", height = 6, width = 7)
+
+DimPlot(alldata, group.by = "modality", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupByModality.png", height = 6, width = 7)
+
+DimPlot(alldata, group.by = "chemistry", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupByChemistry.png", height = 6, width = 7)
+
+DimPlot(alldata, group.by = "sex", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupBySex.png", height = 6, width = 7)
+
+
+DimPlot(alldata, group.by = "orig.ident", reduction = "umap.rpca", raster = F,shuffle = T) + NoAxes() + NoLegend()
+ggsave("RPCAUMAP_GroupByBatchNoLegend.png", height = 6, width = 6)
+
+DimPlot(alldata, group.by = "timepoint", reduction = "umap.rpca", raster = F, shuffle = T) + NoAxes() + NoLegend()
+ggsave("RPCAUMAP_GroupByTimepointNolegend.png", height = 6, width = 6)
+
+DimPlot(alldata, group.by = "modality", reduction = "umap.rpca", raster = F, shuffle = T) + NoAxes() + NoLegend()
+ggsave("RPCAUMAP_GroupByModalityNoLegend.png", height = 6, width = 6)
+
+DimPlot(alldata, group.by = "chemistry", reduction = "umap.rpca", raster = F, shuffle = T) + NoAxes() + NoLegend()
+ggsave("RPCAUMAP_GroupByChemistryNoLegend.png", height = 6, width = 6)
+
+DimPlot(alldata, group.by = "sex", reduction = "umap.rpca", raster = F, shuffle = T) + NoAxes() +  NoLegend()
+ggsave("RPCAUMAP_GroupBySexNoLegend.png", height = 6, width = 6)
+
+
+
+```
+
+Making Graphs for CSCI WIP Progress
+
+```{r}
+name = "AllCells"
+cols <- metacluster_colors
+
+
+alldata$celltype <- Idents(alldata)
+
+
+cells <- as.data.frame(table(alldata$metaclusters,alldata$timepoint))
+
+g4 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g4 <- g4 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g4
+
+
+ggsave(filename = paste0(name, "Subset_RatioOvertimeVer2.tiff"))
+
+alldata.1 = SplitObject(alldata, split.by = "modality")
+cells <- as.data.frame(table(alldata.1$scRNAseq$metaclusters,alldata.1$scRNAseq$timepoint))
+
+cells <- cells %>% filter(Freq != 0)
+
+g4 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g4 <- g4 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g4
+
+ggsave("scRANSeqMetaclusterBarPlotOverTimepoint.png")
+
+
+cells <- as.data.frame(table(alldata.1$snRNAseq$metaclusters,alldata.1$snRNAseq$timepoint))
+cells <- cells %>% filter(Freq != 0)
+
+g5 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g5 <- g5 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g5
+
+ggsave("snRNAseqMetaclusterBarPlotOverTimepoint.png")
+
+
+cells <- as.data.frame(table(alldata.1$CITEseq$metaclusters,alldata.1$CITEseq$timepoint))
+cells <- cells %>% filter(Freq != 0)
+
+g6 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g6 <- g6 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g6
+
+ggsave("CITEseqMetaclusterBarPlotOverTimepoint.png")
+
+g4 <- g4 + NoLegend()
+g5 <- g5 + NoLegend()
+g6 <- g6 + NoLegend()
+g4+g6+g5
+
+ggsave("ModalitiesMetaclusterBarPlotOverTimepoint.png", width = 10, height = 5)
+
+alldata$celltype <- Idents(alldata)
+
+
+cells <- as.data.frame(table(alldata$metaclusters,alldata$modality))
+
+g4 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g4 <- g4 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g4
+
+
+ggsave(filename = paste0(name, "Subset_RatioOverModalityVer2.tiff"))
+
+
+
+cells <- as.data.frame(table(alldata$metaclusters,alldata$condition))
+
+g4 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g4 <- g4 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g4
+
+
+ggsave(filename = paste0(name, "Subset_RatioOverConditionsyVer2.tiff"))
+
+```
+
+LineGraphs
+
+```{r}
+library(ggpattern)
+metadata <- alldata@meta.data
+
+ cols <- metacluster_colors
+result_df <- metadata %>%
+  group_by(orig.ident, modality, metaclusters) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(orig.ident) %>%
+  mutate(TotalCount = sum(Count),
+         Proportion = Count / TotalCount) %>%
+  ungroup() %>%
+  group_by(modality, metaclusters) %>%
+  summarise(AverageCount = mean(Count, na.rm = TRUE),
+            Count_SD = sd(Count, na.rm = TRUE),
+            AverageProportion = mean(Proportion, na.rm = TRUE),
+            Proportion_SD = sd(Proportion, na.rm = TRUE), 
+            Percentage = AverageProportion * 100,
+            SD_Percentage = Proportion_SD * 100, .groups = "drop")
+
+ggplot(result_df, aes(x = metaclusters, y = AverageCount, fill = metaclusters)) +
+  geom_col_pattern(
+    aes(fill = metaclusters, pattern_density = modality),
+    colour          = 'black', 
+    size            = 0.5,  
+    position        = "stack",
+    pattern_fill    = 'white',
+    pattern_colour  = NA
+  ) +
+  theme_bw() +
+  scale_fill_manual(values = cols, guide = FALSE) +
+  labs(
+    x = "Cell Type",
+    y = "Average Number of Cells",
+    fill = "Cell Type"
+  )  + 
+  coord_flip() +
+  scale_pattern_manual(values = c(snRNAseq = "none", scRNAseq = "stripe", CITEseq = "circle")) +  # Specify patterns for modalities
+  scale_pattern_density_manual(values = c(snRNAseq = 0, scRNAseq = 0.5, CITEseq = 1)) +
+  theme(axis.text.y = element_text(size = 12), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+# Save the plot
+ggsave("Global_ModalityCelltype_Averages.png", width = 7, height = 7)
+
+cols <- c("springgreen2", "orange2", "steelblue2")
+
+ggplot(result_df, aes(x = metaclusters, y = AverageProportion, fill = modality)) + 
+  geom_bar(
+    stat = "identity",
+    position = "fill",
+    colour = 'black',
+    size = 0.5
+  ) + 
+  theme_bw() + 
+  labs(
+    x = "Cell Type",
+    y = "Average Proportion",
+    fill = "Modality"
+  ) + 
+  coord_flip() + 
+  theme(
+    axis.text.y = element_text(size = 12),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  ) + 
+  scale_y_continuous(labels = scales::percent_format()) + 
+  scale_fill_manual(values = cols)
+# Save the plot
+ggsave("Global_ModalityCMetaclusters_Proportions.png", width = 7, height = 7)
+```
+
+Repeat above plot, faceted by timepoint
+
+```{r}
+result_df <- metadata %>%
+  group_by(orig.ident, timepoint, modality, metaclusters) %>%   # Include timepoint here
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(orig.ident, timepoint) %>%                      # Also include timepoint here
+  mutate(TotalCount = sum(Count),
+         Proportion = Count / TotalCount) %>%
+  ungroup() %>%
+  group_by(modality, timepoint, metaclusters) %>%              # Include timepoint in the final grouping
+  summarise(AverageCount = mean(Count, na.rm = TRUE),
+            Count_SD = sd(Count, na.rm = TRUE),
+            AverageProportion = mean(Proportion, na.rm = TRUE),
+            Proportion_SD = sd(Proportion, na.rm = TRUE), 
+            Percentage = AverageProportion * 100,
+            SD_Percentage = Proportion_SD * 100, .groups = "drop")
+
+ggplot(result_df, aes(x = metaclusters, y = AverageCount, fill = metaclusters)) +
+  geom_col_pattern(
+    aes(fill = metaclusters, pattern_density = modality),
+    colour          = 'black', 
+    size            = 0.5,  
+    position        = "stack",
+    pattern_fill    = 'white',
+    pattern_colour  = NA
+  ) +
+  theme_bw() +
+  scale_fill_manual(values = cols, guide = FALSE) +
+  labs(
+    x = "Cell Type",
+    y = "Average Number of Cells",
+    fill = "Cell Type"
+  )  + 
+  coord_flip() +
+  facet_wrap(~timepoint, ncol = 3) +
+  scale_pattern_manual(values = c(snRNAseq = "none", scRNAseq = "stripe", CITEseq = "circle")) +  # Specify patterns for modalities
+  scale_pattern_density_manual(values = c(snRNAseq = 0, scRNAseq = 0.5, CITEseq = 1)) +
+  theme(axis.text.y = element_text(size = 12), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+# Save the plot
+ggsave("Global_ModalityMetaclusters_Averages_TimepointFacet.png", width = 16, height = 14)
+
+```
+
+```{r}
+# Extract meta data information from unaltered data (alldata) and data downsampled to size of smallest batch (alldata_downsample)
+min.cells <- min(table(alldata$orig.ident))
+#Set identities to the meta data that we want to downsample on
+Idents(alldata) <- "orig.ident"
+#Subset the data, specifying that we want to downsample to the smallest batch size
+alldata_downsample <- subset(alldata, downsample = min.cells)
+#View the sizes of all the downsampled batches
+table(alldata_downsample$orig.ident)
+```
+
+```{r}
+# Extract meta data information from unaltered data (alldata) and data downsampled to size of smallest batch (alldata_downsample)
+metadata <- alldata@meta.data
+metadata_downsample <- alldata_downsample@meta.data
+
+# Set color palette
+pal <- metacluster_colors
+
+# Calculate counts, average counts, count SD, proportions, average proportions, and proportion SD in one pipeline for NOT downsampled data
+result_df <- metadata %>%
+  group_by(orig.ident, timepoint, metaclusters) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(orig.ident) %>%
+  mutate(TotalCount = sum(Count),
+         Proportion = Count / TotalCount) %>%
+  ungroup() %>%
+  group_by(timepoint,metaclusters) %>%
+  summarise(AverageCount = mean(Count, na.rm = TRUE),
+            Count_SD = sd(Count, na.rm = TRUE),
+            AverageProportion = mean(Proportion, na.rm = TRUE),
+            Proportion_SD = sd(Proportion, na.rm = TRUE), 
+            Percentage = AverageProportion * 100,
+            SD_Percentage = Proportion_SD * 100, .groups = "drop")
+
+# Calculate counts, average counts, count SD, proportions, average proportions, and proportion SD in one pipeline for downsampled data
+result_df_down <- metadata_downsample %>%
+  group_by(orig.ident, timepoint, metaclusters) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(orig.ident) %>%
+  mutate(TotalCount = sum(Count),
+         Proportion = Count / TotalCount) %>%
+  ungroup() %>%
+  group_by(timepoint, metaclusters) %>%
+  summarise(AverageCount = mean(Count, na.rm = TRUE),
+            Count_SD = sd(Count, na.rm = TRUE),
+            AverageProportion = mean(Proportion, na.rm = TRUE),
+            Proportion_SD = sd(Proportion, na.rm = TRUE), 
+            Percentage = AverageProportion * 100,
+            SD_Percentage = Proportion_SD * 100, .groups = "drop")
+
+# Define the correct order of timepoints
+timepoint_levels <- c("UWO", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW")
+
+# Ensure that timepoint columns are factors with the correct levels
+result_df$timepoint <- factor(result_df$timepoint, levels = timepoint_levels)
+result_df_down$timepoint <- factor(result_df_down$timepoint, levels = timepoint_levels)
+
+# Create ggplot for average cell type counts with error bars (downsampled data)
+ggplot(result_df, aes(x = timepoint, y = AverageCount, color = metaclusters, group = metaclusters)) +
+  geom_ribbon(aes(ymin = AverageCount - Count_SD, ymax = AverageCount + Count_SD, fill = metaclusters), alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  #geom_errorbar(aes(ymin = AverageCount - SD, ymax = AverageCount + SD), width = 0.2) + #Can include error bars if desired
+  facet_wrap(~ metaclusters, scales = "free_y") +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.x = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.y = element_text(size = 11, family = "Arial", face = "bold"),
+    strip.text = element_text(size = 11, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 11, family = "Arial", face = "bold", hjust = 0.5)
+  )  +
+  labs(title = "Average Cell Type Counts Over Time",
+       x = "Timepoint",
+       y = "Average Cell Count") +
+  NoLegend()
+ggsave("Global_AverageCelltypeCount.png", width = 9, height = 5.5)
+
+# Create ggplot for average cell type counts with error ribbon (downsampled data)
+ggplot(result_df_down, aes(x = timepoint, y = AverageCount, color = metaclusters, group = metaclusters)) +
+  geom_ribbon(aes(ymin = AverageCount - Count_SD, ymax = AverageCount + Count_SD, fill = metaclusters), alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  #geom_errorbar(aes(ymin = AverageCount - SD, ymax = AverageCount + SD), width = 0.2) + #Can include error bars if desired
+  facet_wrap(~ metaclusters, scales = "free_y") +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.x = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.y = element_text(size = 11, family = "Arial", face = "bold"),
+    strip.text = element_text(size = 11, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 11, family = "Arial", face = "bold", hjust = 0.5)
+  )  +
+  labs(title = "Average Downsampled Cell Type Counts Over Time",
+       x = "Timepoint",
+       y = "Average Cell Count") +
+  NoLegend()
+ggsave("Global_AverageCelltypeCount_Downsampled.png", width = 9, height = 5.5)
+
+#Create ggplot for proportions over time
+ggplot(result_df, aes(x = timepoint, y = Percentage, color = metaclusters, group = metaclusters)) +
+  geom_ribbon(aes(ymin = Percentage - SD_Percentage, ymax = Percentage + SD_Percentage, fill = metaclusters), alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ metaclusters, scales = "free_y") +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.x = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.y = element_text(size = 11, family = "Arial", face = "bold"),
+    strip.text = element_text(size = 11, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 11, family = "Arial", face = "bold", hjust = 0.5)
+  ) +
+  labs(title = "Average Cell Type Proportions Over Time",
+       x = "Timepoint",
+       y = "Average Proportion (% of Total)") +
+  NoLegend()
+ggsave("Global_AverageCelltypeProp.png", width = 9, height = 5.5)
+
+#Create ggplot for proportions over time using downsampled data
+ggplot(result_df_down, aes(x = timepoint, y = Percentage, color = metaclusters, group = metaclusters)) +
+  geom_ribbon(aes(ymin = Percentage - SD_Percentage, ymax = Percentage + SD_Percentage, fill = metaclusters), alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ metaclusters, scales = "free_y") +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.x = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.y = element_text(size = 11, family = "Arial", face = "bold"),
+    strip.text = element_text(size = 11, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 11, family = "Arial", face = "bold", hjust = 0.5)
+  ) +
+  labs(
+    title = "Averaged Downsampled Cell Type Proportions Over Time",
+    x = "Timepoint",
+    y = "Average Proportion (% of Total)"
+  ) +
+  NoLegend()
+
+ggsave("Global_AverageCelltypeProp_Downsampled.png", width = 9, height = 5.5)
+#Save the dataframe as an xlsx file
+writexl::write_xlsx(list(result_df, result_df_down), "Global_CellCountsProps.xlsx")
+
+
+
+# Extract baseline UWO percentages per metacluster
+baseline <- result_df %>%
+  filter(timepoint == "UWO") %>%
+  select(metaclusters, UWO_Percentage = Percentage)
+
+# Join to result_df and calculate fold change vs. UWO
+result_df <- result_df %>%
+  left_join(baseline, by = "metaclusters") %>%
+  mutate(RelativeToUWO = Percentage / UWO_Percentage)
+
+# Plot relative proportion (UWO = 1)
+ggplot(result_df, aes(x = timepoint, y = RelativeToUWO, color = metaclusters, group = metaclusters)) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  scale_color_manual(values = pal) +
+  labs(
+    title = "Cell Type Proportions Relative to UWO (Baseline = 1)",
+    y = "Relative Proportion",
+    x = "Timepoint"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 16, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+    legend.title = element_blank(),
+    panel.grid.major = element_line(color = "grey50"),  # Show major grid lines
+    panel.grid.minor = element_line(color = "grey50")   # Show minor grid lines
+  )
+ggsave("GlobalLineGraphOverTimeForProportionComparedToUWO.png", height =5, width = 10)
+```
+
+```{r}
+alldata <- BuildClusterTree(alldata, reduction = "pca")
+PlotClusterTree(alldata, direction = "rightwards")
+tiff("GlobalSubset_PhyloTree.tiff")
+dev.off()
+```
+
+```{r Runnning Differntial Expression Across Modalities}
+# 
+# set.seed()
+# levels(alldata$orig.ident)
+# pal <- c("royalblue2", "turquoise2", "deepskyblue2", "red2", "springgreen2", "gold2", "mediumpurple2", "orange2", "darkseagreen2", "orchid2", "magenta2", "tomato3")
+# 
+# # Define the specific orig.ident values to keep
+# selected_orig_idents <- c("UW_Haensel1", "UW_Haensel2", "UW_Vu_v3","UW_Joost_1","D1PW_Justynski",
+#                           "D2PW_Justynski","D4PW_Haensel1", "D4PW_Haensel2", "D4PW_Haensel3", "D4PW_Vu_v3","D7PW_Vu_v2_1", "D7PW_Vu_v2_2", "D7PW_Vu_v3")
+# 
+# # Subset the Seurat object using the specified orig.ident values
+# alldata_subset <- subset(alldata, subset = orig.ident %in% selected_orig_idents)
+# 
+# alldata_subset <- IntegrateLayers(
+#   object = alldata_subset, 
+#   method = RPCAIntegration, 
+#   normalization.method = "SCT", 
+#   orig.reduction = "pca", 
+#   new.reduction = "rpca",
+#   verbose = F)
+# 
+# pcs = npcs(alldata_subset, var.total = 0.9)
+#  
+# alldata_subset <- FindNeighbors(alldata_subset, reduction = "rpca", dims = 1:pcs) %>% 
+#   FindClusters(resolution = 1, cluster.name = "rpca_clusters") %>%
+#   RunUMAP(reduction = "rpca", dims = 1:pcs, reduction.name = "umap.rpca")
+# 
+# Idents(alldata_subset) = alldata_subset$metaclusters
+# DimPlot(alldata_subset, cols = pal, reduction = "umap.rpca", pt.size = .3, label = F) + NoLegend() + NoAxes() 
+# ggsave("UMAPPublicAvaibleData.tiff")
+# 
+# 
+# #Subset Singel Nuceli Data
+# # Subset the Seurat object using the specified orig.ident values
+# alldata_subset <- subset(alldata, subset = modality %in% "snRNAseq")
+# 
+# alldata_subset <- IntegrateLayers(
+#   object = alldata_subset, 
+#   method = RPCAIntegration, 
+#   normalization.method = "SCT", 
+#   orig.reduction = "pca", 
+#   new.reduction = "rpca",
+#   verbose = F)
+# 
+# pcs = npcs(alldata_subset, var.total = 0.9)
+#  
+# alldata_subset <- FindNeighbors(alldata_subset, reduction = "rpca", dims = 1:pcs) %>% 
+#   FindClusters(resolution = 1, cluster.name = "rpca_clusters") %>%
+#   RunUMAP(reduction = "rpca", dims = 1:pcs, reduction.name = "umap.rpca")
+# 
+# Idents(alldata_subset) = alldata_subset$metaclusters
+# DimPlot(alldata_subset, cols = pal, reduction = "umap.rpca", pt.size = .3, label = F) + NoLegend() + NoAxes() 
+# ggsave("UMAPSingleNuceliData.tiff")
+# 
+# # Subset the CITEseq data and make individual UMAP
+# alldata_subset <- subset(alldata, subset = modality %in% "CITEseq")
+# 
+# alldata_subset <- IntegrateLayers(
+#   object = alldata_subset, 
+#   method = RPCAIntegration, 
+#   normalization.method = "SCT", 
+#   orig.reduction = "pca", 
+#   new.reduction = "rpca",
+#   verbose = F)
+# 
+# pcs = npcs(alldata_subset, var.total = 0.9)
+#  
+# alldata_subset <- FindNeighbors(alldata_subset, reduction = "rpca", dims = 1:pcs) %>% 
+#   FindClusters(resolution = 1, cluster.name = "rpca_clusters") %>%
+#   RunUMAP(reduction = "rpca", dims = 1:pcs, reduction.name = "umap.rpca")
+# 
+# Idents(alldata_subset) = alldata_subset$metaclusters
+# DimPlot(alldata_subset, cols = pal, reduction = "umap.rpca", pt.size = .3, label = F) + NoLegend() + NoAxes() 
+# ggsave("UMAPCITEseqData.tiff")
+
+
+```
+
+Differential Expression
+
+```{r}
+
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+# Define cell types to iterate over
+cell_types <- c("IFE", "HF", "Immune cells", "Sebocytes", "Fibroblasts", 
+                "Schwann cells", "Endothelial cells", "Pericytes", 
+                "Muscle cells", "Melanocytes", "RBCs", "Adipocytes")
+
+# Iterate over each cell type
+for (cell_type in cell_types) {
+  # Subset data based on the specified cell type
+  Idents(alldata) <- "metaclusters"
+  alldata.1 <- subset(alldata, ident = c(cell_type))
+  
+  # Perform DE analysis for different comparisons
+  de_results.04 <- DElegate::findDE(
+    object = alldata.1, 
+    compare = c("Wounded_D4PW", "Unwounded"),
+    method = "deseq",
+    group_column = "timepoint",
+    replicate_column = "orig.ident"
+  )
+  de_results.47 <- DElegate::findDE(
+    object = alldata.1, 
+    compare = c("Wounded_D7PW", "Wounded_D4PW"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  de_results.715 <- DElegate::findDE(
+    object = alldata.1, 
+    compare = c("Wounded_D15PW", "Wounded_D7PW"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  de_results.1530 <- DElegate::findDE(
+    object = alldata.1, 
+    compare = c("Wounded_D30PW", "Wounded_D15PW"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  
+  # Set filtering thresholds
+  x <- 1
+  y <- 0.01
+  
+  # Subset DE results based on thresholds
+  res.04 <- subset(de_results.04, padj < y & log_fc > x)
+  res.47 <- subset(de_results.47, padj < y & log_fc > x)
+  res.715 <- subset(de_results.715, padj < y & log_fc > x)
+  res.1530 <- subset(de_results.1530, padj < y & log_fc > x)
+  
+  # Convert SYMBOL to ENTREZID
+  ids.04 <- bitr(res.04$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.47 <- bitr(res.47$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.715 <- bitr(res.715$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.1530 <- bitr(res.1530$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  
+  # Create a gene list
+  genelist <- list(
+    UWOvsD4PW = ids.04$ENTREZID,
+    D4PWvsD7PW = ids.47$ENTREZID,
+    D7PWvsD15PW = ids.715$ENTREZID,
+    D15PWvsD30PW = ids.1530$ENTREZID
+  )
+  
+  # Run ClusterProfiler
+  ck <- compareCluster(geneCluster = genelist, fun = enrichGO, OrgDb = org.Mm.eg.db, 
+                       pvalueCutoff = 0.05, ont = "BP")
+  ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
+  
+  # Plot dotplot
+  s1 <- dotplot(ck, showCategory = 5, font.size = 12, label_format = 100) + 
+    theme(plot.margin = grid::unit(c(0, 0, 0, 0), "mm"))
+  s2 <- s1 + 
+    theme(axis.text.x = element_text(size = 12, face = "bold", color = "black", angle = 45)) + 
+    theme(axis.text.y = element_text(size = 12, face = "bold", color = "black"))
+  print(s2)
+  
+  # Save plot
+  ggsave(paste0("GO_", gsub(" ", "_", cell_type), ".tiff"), width = 10, height = 5)
+  
+  # Save cluster summary to a CSV file
+  cluster_summary <- data.frame(ck)
+  write.csv(cluster_summary, file = paste0("GO_", gsub(" ", "_", cell_type), ".csv"), row.names = FALSE)
+}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+Running GO using FindMarkers for Each Timepoint
+
+```{r}
+
+#Differntial Expression
+library(clusterProfiler)
+library(org.Mm.eg.db)
+#Perform Gene Ontology Anaylsis for Each Individual Timepoint Upregulated using Find Markers
+Idents(alldata.1) <- "timepoint"
+DefaultAssay(alldata.1) <- "RNA"
+
+#Find markers for celltype
+cellmarkers <- FindAllMarkers(alldata.1, min.pct = 0.5, recorrect_umi = F, only.pos = T)
+
+
+res.uwo = subset(cellmarkers, cluster == "Unwounded", avg_log2FC > 1)
+res.wo4 = subset(cellmarkers, cluster == "Wounded_D4PW", avg_log2FC > 1)
+res.wo7 = subset(cellmarkers, cluster == "Wounded_D7PW", avg_log2FC > 1)
+res.wo15 = subset(cellmarkers, cluster == "Wounded_D15PW", avg_log2FC > 1)
+res.wo30 = subset(cellmarkers, cluster == "Wounded_D30PW", avg_log2FC > 1)
+
+
+ids.uwo<-bitr(res.uwo$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.wo4<-bitr(res.wo4$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.wo7<-bitr(res.wo7$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.wo15<-bitr(res.wo15$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.wo30<-bitr(res.wo30$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+
+genelist = list(UWO = ids.uwo$ENTREZID, 
+           D4PW = ids.wo4$ENTREZID,
+           D7PW = ids.wo7$ENTREZID,
+           D15PW = ids.wo15$ENTREZID,
+           D30PW = ids.wo30$ENTREZID)
+           
+
+# Run ClusterProifler
+
+ck <- compareCluster(geneCluster = genelist, fun = enrichGO, OrgDb = org.Mm.eg.db, pvalueCutoff = 0.05, ont = "BP")
+
+ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType="ENTREZID")
+dotplot(ck) 
+s1 = dotplot(ck, showCategory = 5, font.size = 18, label_format = 100)
+s1 = s1 + theme(plot.margin=grid::unit(c(0,0,0,0), "mm"))
+s2 = s1 + theme(axis.text.x = element_text(size=18, face="bold", color = "black"))
+s2 = s2 + theme(axis.text.y = element_text(size=18, face="bold", color = "black"))
+s2
+```
+
+```{r}
+#Load PSU Dataset
+alldata.1 = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 1-2/PSUUnit.rds")
+#Change identity levels so that they are grouped without cell cluster
+Idents(alldata.1) <- gsub("\\s+[IVX]+$", "", Idents(alldata))
+Idents(alldata.1) <- gsub("\\s+[0-9]+$", "", Idents(alldata))
+levels(alldata.1)
+```
+
+Run GSEA analysis
+
+```{r}
+library(clusterProfiler)
+library(DElegate)
+library(org.Mm.eg.db)
+
+
+celltype <- "PSU"
+#In case the celltype column in the metadata has a different name 
+identity_metadata <- "celltype"
+
+
+alldata.1$celltype <- Idents(alldata.1)
+
+cellmarkers_bulk <- findDE(alldata.1, group_column = identity_metadata, replicate_column = "orig.ident", method = "deseq", lfc_shrinkage = "apeglm")
+
+
+#Order the results by decreasing log2FC
+cellmarkers_bulk <- cellmarkers_bulk %>%
+  group_by(group1) %>%
+  arrange(desc(log_fc)) %>%
+  ungroup()
+
+gse_bulk <- compareCluster(feature|log_fc~group1, data = cellmarkers_bulk, fun = gseGO, OrgDb = org.Mm.eg.db,
+                            keyType ="SYMBOL", pvalueCutoff = 0.05, pAdjustMethod = "BH", ont = "BP", nPermSimple = 10000, eps = 0)
+
+
+
+dotplot(gse_bulk) 
+
+
+
+s1 <- dotplot(gse_bulk, showCategory =3, font.size = 8, label_format = 100) +
+  theme(plot.margin = grid::unit(c(0, 0, 0, 0), "mm"))
+
+s2 <- s1 +
+  theme(axis.text.y  = element_text(size = 11, face = "bold", color = "black")) +
+  theme(axis.text.x = element_text(size = 11, face = "bold", color = "black", angle = 45))
+s2
+ggsave("DotPlotPSUGroupedByCluster.tiff",height = 8, width = 10)
+
+cluster_summary <- data.frame(gse)
+write.csv(cluster_summary, file = paste0("GO_PSUDELEGATE.csv"), row.names = FALSE)
+```
+
+Figure 1
+
+```{r}
+
+Idents(alldata) <- "metaclusters"
+features = c("Krt14","Itga6", #Keratincoytes Labels
+             "Krt15","Sox9",
+             "Pparg", #Sebocytes
+             "Col1a2","Pdgfra", #Fibroblast Markers
+             "Ptprc", # Immune Cell Markers
+             "Pecam1", #Endothelial Cell Markers
+                          "Rgs5", #Pericytes
+             "Mylpf", "Des", # Muscle Markers
+                          "Mpz", #Schwann Cell Markers
+             "Mlana", #Melanocyte Marker
+             "Adipoq", #Adipocyte Markers
+             "Hba-a1","Hbb-bt" #RBC marker
+)
+
+
+
+DotPlot(alldata, features, dot.scale = 7) + RotatedAxis()
+
+
+
+p <- DotPlot(alldata, features, dot.scale = 7, cols = "RdYlBu") + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") # Outlines circles in black
+
+# Display the plot
+p
+
+ggsave("DotPlotAllModalityIntergrationAcrossCellTypesNew.png",dpi = 300,height = 6, width =7.3 )
+
+```
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl5","Cxcr2","Acp5","Il23a", #D4PW Leukocote Recruitment, Tissue Remodeling
+             "Pparg","Gpc6","Ctnna3") #D7PW Proliferation
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "springgreen4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotImmuneCellsGO.tiff",dpi = 300,height = 4.5, width = 7 )
+
+
+```
+
+Gene Ontology Dot Plots for Immune Cells
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+  
+alldata.1 <- subset(alldata, ident = "Immune cells")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl5","Cxcr2","Acp5","Il23a", #D4PW Leukocote Recruitment, Tissue Remodeling
+             "Pparg","Gpc6","Ctnna3") #D7PW Proliferation
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "springgreen4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotImmuneCellsGO2.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+Gene Ontology Dot Plots For Fibroblasts
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+  
+alldata.1 <- subset(alldata, ident = "Fibroblasts")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("S100a8","S100a9","Ccl22","Cxcl12", #D4PW Leukocote Recruitment, Tissue Remodeling
+                          "Acta2","Nox4", #Contraction
+             "Egfr","Esr1","Pdgfd","Fgf2","Pak3", #D7PW Fibroblast Profliferation/Migration
+             "Wnt10b","Msx2" #Anagen
+                 ) 
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "red3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotFibroblastsGO.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+Gene Ontology Dot Plots for IFE
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+alldata.1 <- subset(alldata, ident = "IFE")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl3","Il1b",
+             "Ubb","Sfn",#Cell Inflamation
+             "Egfr","Notch2","Bmpr1a","Fgfr2",
+             
+             "Mki67", "Barx2","Dlx2",
+             "Myc")
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "royalblue4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotIFEGO.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+Gene Ontology Dot Plots for HF
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+alldata.1 <- subset(alldata, ident = "HF")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl3","Fcgr2b", "Cxcl14","Ubc", #Inflammation
+             "Ext1","Lrig1", "Lgals1","Atf2", #Axonogensis/Muscle
+             "Krt27","Dlx3","Smad3", #Hair Follicle
+             "Sox9"
+             
+        )
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "skyblue4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotHFGO.tiff",dpi = 300,height = 3.5, width = 8 )
+
+```
+
+Gene Ontology Dot Plots for Sebocytes
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+alldata.1 <- subset(alldata, ident = "Sebocytes")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl2","Ccl4","Tagln2","S100a11", #Inflammation
+             "Cdk14","Tanc2a", "Efna5", #Hair Follicle
+             "Lef1","Sox5", "Mef2c", "Esr1","Bmpr2"
+        )
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "turquoise4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotSebocytesGO.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+Gene Ontology Dot Plots for Schwann Cells
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+alldata.1 <- subset(alldata, ident = "Schwann cells")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cttn","Cfl1","Tubb2b", #modification of postsynaptic structure
+             "Ptprg","Nf1","Ptprz1","Magi2", #Hair Follicle
+             "Chl1","Hmox1"
+        )
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "darkseagreen3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotSchwannCells.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+Gene Ontology Dot Plots for Skeletal Muscle
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+alldata.1 <- subset(alldata, ident = "Muscle cells")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("S100a9","Il1b","Ccl3", #modification of postsynaptic structure
+             "Ttn","Mlip3","Mef2c","Sox6", #Hair Follicle
+             "Smad4","Lef1","Notch1", "Dab2"
+        )
+             
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "orange3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotSkeletalMuscle.tiff",dpi = 300,height = 3.5, width = 8 )
+
+```
+
+Gene Ontology Dot Plots for Skeletal Muscle
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+alldata.1 <- subset(alldata, ident = "Endothelial")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Serpine1","Spp1","Ccl3","Thbs1","Egr1", #modification of postsynaptic structure
+             "Ptprm","Cdh13","Vegfc", #Hair Follicle
+             "Bmpr1a","Dlx3","Cdh3", "Lncpint")
+             
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "gold3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotEndothelial.tiff",dpi = 300,height = 3.5, width = 8 )
+
+```
+
+Gene Ontology for Hair Follicle
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+alldata.1 <- subset(alldata, ident = "Endothelial")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Serpine1","Spp1","Ccl3","Thbs1","Egr1", #modification of postsynaptic structure
+             "Ptprm","Cdh13","Vegfc", #Hair Follicle
+             "Bmpr1a","Dlx3","Cdh3", "Lncpint")
+             
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "gold3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotEndothelial.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+```{r}
+#Phylogentic Genes
+alldata <- BuildClusterTree(alldata, reduction = "pca")
+PlotClusterTree(alldata, direction = "rightwards")
+tiff("AllCellsSubset_PhyloTree.tiff")
+PlotClusterTree(alldata, direction = "rightwards")
+dev.off()
+```
+
+
+Run Cell Chat on the Global Cell Types
+
+```{r}
+##Prep the cellchat database
+CellChatDB <- CellChatDB.mouse
+
+showDatabaseCategory(CellChatDB)
+#This removes non-protein interactions that are contained in the CellChat DB such as synaptic interactions and metabolic signals
+CellChatDB.use <- subsetDB(CellChatDB)
+
+```
+
+```{r}
+#Hold off Until RoadMap
+cellchat <- createCellChat(object = alldata.1, group.by = "celltype", assay = "RNA")
+levels(cellchat@idents)
+cellchat <- subsetData(cellchat) # This step is necessary even if using the whole database
+future::plan("multisession", workers = 4) # do parallel
+cellchat <- identifyOverExpressedGenes(cellchat)
+cellchat <- identifyOverExpressedInteractions(cellchat)
+
+```
+
+```{r BarPlot Showing Cell Number Across Samples}
+# Load necessary libraries
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Extract the orig.ident counts
+orig_counts <- table(alldata$orig.ident) %>% as.data.frame()
+colnames(orig_counts) <- c("orig.ident", "cell_count")
+
+# Step 2: Add group based on substrings in the orig.ident names
+orig_counts$group <- case_when(
+  grepl("Haensel", orig_counts$orig.ident)    ~ "Haensel (2020)",
+  grepl("Vu", orig_counts$orig.ident)         ~ "Vu (2022)",
+  grepl("snRNAseq", orig_counts$orig.ident)   ~ "snRNAseq",
+  grepl("CITEseq", orig_counts$orig.ident)    ~ "CITEseq",
+  grepl("Justynski", orig_counts$orig.ident)  ~ "Justynski (2023)",
+  TRUE                                        ~ "Other"
+)
+
+# Step 3: Summarize total cells per group
+group_counts <- orig_counts %>%
+  group_by(group) %>%
+  summarise(total_cells = sum(cell_count)) %>%
+  arrange(desc(total_cells))
+
+# Step 4: Plot
+# Step 4: Horizontal bar plot with black outlines
+ggplot(group_counts, aes(x = reorder(group, total_cells), y = total_cells, fill = group)) +
+  geom_bar(stat = "identity", width = 0.9, color = "black", size = 0.8) +
+  geom_text(aes(label = total_cells),
+            hjust = -0.4,
+            size = 4.5,
+            fontface = "bold") +
+  labs(title = "Total Cell Counts by Dataset Group",
+       x = "Sample Group",
+       y = "Number of Cells") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +
+  coord_flip() +
+  theme_ggprism_mod(base_size = 16) +
+  theme(
+    legend.position = "none",
+    axis.text.y = element_text(face = "bold")
+  ) +
+  custom_theme
+
+ggsave("Grouped_Barplot_by_SampleIdentiy.png",
+       width = 8, height = 5, dpi = 300)
+```
