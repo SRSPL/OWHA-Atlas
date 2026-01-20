@@ -1,0 +1,4002 @@
+---
+title: "Figure 2 UMAP Making"
+author: "Jonathan Chin Cheong"
+date: "2024-10-21"
+output: html_document
+---
+
+```{r}
+set.seed(123)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 1-2")
+```
+
+```{r pressure, echo=FALSE}
+#Load Libraries
+library(Seurat)
+library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(Rfast2)
+library(viridis)
+library(scCustomize)
+library(harmony)
+library(khroma)
+```
+
+Load Data Sets
+
+```{r}
+#Newer Data
+#alldata = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Preprocessing/MultimodalAtlas_Integrated_Annotated_012725.rds")
+
+alldata = readRDS("")
+```
+
+```{r}
+# 1. Define base colors for the metaclusters
+metacluster_colors <- c(
+  "IFE" = "royalblue2",              # Light Red for IFE
+  "HF" = "turquoise2",               # Red for HF
+  "Sebocytes" = "deepskyblue2",        # Orange for Sebocytes
+  "Fibroblasts" = "red2",      # Green for Fibroblasts
+  "Immune cells" = "springgreen2",     # Light Blue for Immune cells
+  "Endothelial cells" = "gold2",# Lighter Blue for Endothelial cells
+  "Pericytes" = "mediumpurple2",        # Yellow for Pericytes
+  "Muscle cells" = "orange2",     # Purple for Muscle cells
+  "Schwann cells" = "darkseagreen2",    # Olive for Schwann cells
+  "Melanocytes" = "orchid2",      # Pink for Melanocytes
+  "Adipocytes" = "magenta2",       # Light Green for Adipocytes
+  "RBCs" = "tomato3"              # Dark Red for RBCs
+)
+
+# 2. Create finer colors within each metacluster group
+# You can use functions like colorRampPalette to generate gradients or variations for each fine cell type.
+fine_colors <- list()
+
+for (meta in names(metacluster_groups)) {
+  num_celltypes <- length(metacluster_groups[[meta]])
+  pal <- colorway::build_palette(central_color = metacluster_colors[[meta]], n_colors = num_celltypes)
+  fine_colors[[meta]] <- pal$palette
+}
+
+# 3. Unlist the fine colors into a single vector, matching the new_order
+color_palette <- unname(unlist(fine_colors))
+
+# 4. Assign the custom color palette to your Seurat object
+# Assuming `new_order` holds the correctly ordered cell type identities
+#Idents(alldata) <- factor(Idents(alldata), levels = new_order)
+
+# Map the palette to the factor levels in the Seurat object
+names(color_palette) <- new_order
+
+# 5. Now, use this palette in your plots
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca") 
+ggsave("UMAPwithLedgend.png", height = 11, width = 11)
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca") & NoLegend()
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca", label = T, repel = T, label.size = 3) & NoLegend()
+
+alldata <- subset(alldata, subset = orig.ident %in% c("UW_Han", "UW_Joost_1", "UW_Joost_2", "UW_Joost_3"), invert = T)
+```
+
+MakeUMAPS for Figure 1
+
+```{r}
+DimPlot(alldata, cols = color_palette, reduction = "umap.rpca", raster =F) & NoLegend() + NoAxes()
+ggsave("UMAPofFineCellTypeAnnotationsNoLabels.svg", width = 6, height = 6)
+ggsave("UMAPofFineCellTypeAnnotationsNoLabels.png", width = 6, height = 6)
+```
+
+```{r}
+VlnPlot(alldata, "percent_mito", group.by = modality)
+```
+
+```{r}
+library(dplyr)
+#Add new modality group 
+alldata$modality_group <- ifelse(alldata$modality %in% c("scRNAseq", "CITEseq"), "whole cell", "nuclei")
+
+# Add a new metadata column called 'condition' based on 'timepoint'
+alldata@meta.data <- alldata@meta.data %>%
+  mutate(condition = case_when(
+    timepoint == "Unwounded" ~ "Unwounded",
+    timepoint %in% c("Wounded_D1PW", "Wounded_D2PW", "Wounded_D4PW", "Wounded_D7PW", "Wounded_D15PW", "Wounded_D30PW") ~ "Wounded",
+    TRUE ~ as.character(timepoint)  # Keeps any other potential values unchanged
+  ))
+```
+
+```{r}
+cols = c("springgreen2", "orange2", "steelblue2")
+
+p <- VlnPlot(alldata, 
+             features = c("nFeature_RNA", "percent_mito", "percent_ribo", "TF Percentage"), 
+             cols = cols, 
+             group.by = "modality", 
+             pt.size = 0)
+
+# Customize the font
+p <- p & theme(
+  text = element_text(family = "Arial", face = "bold", size = 11),
+  axis.text = element_text(family = "Arial", face = "bold", size = 11),
+  axis.title = element_text(family = "Arial", face = "bold", size = 11),
+  legend.text = element_text(family = "Arial", face = "bold", size = 11),
+  legend.title = element_text(family = "Arial", face = "bold", size = 11)
+)
+
+# Display the plot
+p
+
+ggsave("QualityControlofModalities.png", height = 6, width = 7)
+
+
+DimPlot(alldata, group.by = "orig.ident", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupByBatch.png", height = 6, width = 7)
+
+DimPlot(alldata, group.by = "timepoint", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupByTimepoint.png", height = 6, width = 7)
+
+DimPlot(alldata, group.by = "modality", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupByModality.png", height = 6, width = 7)
+
+DimPlot(alldata, group.by = "chemistry", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupByChemistry.png", height = 6, width = 7)
+
+DimPlot(alldata, group.by = "sex", reduction = "umap.rpca", raster = F) + NoAxes()
+ggsave("RPCAUMAP_GroupBySex.png", height = 6, width = 7)
+
+
+DimPlot(alldata, group.by = "orig.ident", reduction = "umap.rpca", raster = F,shuffle = T) + NoAxes() + NoLegend()
+ggsave("RPCAUMAP_GroupByBatchNoLegend.png", height = 6, width = 6)
+
+DimPlot(alldata, group.by = "timepoint", reduction = "umap.rpca", raster = F, shuffle = T) + NoAxes() + NoLegend()
+ggsave("RPCAUMAP_GroupByTimepointNolegend.png", height = 6, width = 6)
+
+DimPlot(alldata, group.by = "modality", reduction = "umap.rpca", raster = F, shuffle = T) + NoAxes() + NoLegend()
+ggsave("RPCAUMAP_GroupByModalityNoLegend.png", height = 6, width = 6)
+
+DimPlot(alldata, group.by = "chemistry", reduction = "umap.rpca", raster = F, shuffle = T) + NoAxes() + NoLegend()
+ggsave("RPCAUMAP_GroupByChemistryNoLegend.png", height = 6, width = 6)
+
+DimPlot(alldata, group.by = "sex", reduction = "umap.rpca", raster = F, shuffle = T) + NoAxes() +  NoLegend()
+ggsave("RPCAUMAP_GroupBySexNoLegend.png", height = 6, width = 6)
+
+
+
+```
+
+Making Graphs for CSCI WIP Progress
+
+```{r}
+name = "AllCells"
+cols = c("royalblue2", "turquoise2", "deepskyblue2", "red2", "springgreen2", "gold2", "mediumpurple2", "orange2", "darkseagreen2", "orchid2", "magenta2", "tomato3")
+
+
+alldata$celltype <- Idents(alldata)
+
+
+cells <- as.data.frame(table(alldata$metaclusters,alldata$timepoint))
+
+g4 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g4 <- g4 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g4
+
+
+#ggsave(filename = paste0(name, "Subset_RatioOvertimeVer2WithNewRuns.tiff"))
+
+alldata.1 = SplitObject(alldata, split.by = "modality")
+cells <- as.data.frame(table(alldata.1$scRNAseq$metaclusters,alldata.1$scRNAseq$timepoint))
+
+cells <- cells %>% filter(Freq != 0)
+
+g4 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g4 <- g4 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g4
+
+ggsave("scRANSeqMetaclusterBarPlotOverTimepointNewTimepoints.png")
+
+
+cells <- as.data.frame(table(alldata.1$snRNAseq$metaclusters,alldata.1$snRNAseq$timepoint))
+cells <- cells %>% filter(Freq != 0)
+
+g5 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g5 <- g5 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g5
+
+ggsave("snRNAseqMetaclusterBarPlotOverTimepointNewTimePoints.png")
+
+
+cells <- as.data.frame(table(alldata.1$CITEseq$metaclusters,alldata.1$CITEseq$timepoint))
+cells <- cells %>% filter(Freq != 0)
+
+g6 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g6 <- g6 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g6
+
+ggsave("CITEseqMetaclusterBarPlotOverTimepointNewTimepoints.png")
+
+g4 <- g4 + NoLegend()
+g5 <- g5 + NoLegend()
+g6 <- g6 + NoLegend()
+g4+g6+g5
+
+ggsave("ModalitiesMetaclusterBarPlotOverTimepointNewTimepoints.png", width = 10, height = 5)
+
+alldata$celltype <- Idents(alldata)
+
+
+cells <- as.data.frame(table(alldata$metaclusters,alldata$modality))
+
+g4 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g4 <- g4 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g4
+
+
+#ggsave(filename = paste0(name, "Subset_RatioOverModalityVer2.tiff"))
+
+
+
+cells <- as.data.frame(table(alldata$metaclusters,alldata$condition))
+
+g4 <- ggplot(cells, aes(fill = Var1, x = Var2, y = Freq)) +
+  geom_bar(position = 'fill', stat = "identity", width = 0.5, color = "black") +
+  scale_fill_manual(values = cols) +
+  ggtitle('Cell Type Representation by Count Ratio') +
+  xlab('') +
+  ylab('% Total Cells') +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+g4 <- g4 + theme(
+    text = element_text(family = "Arial", face = "bold", size = 12),
+    axis.text = element_text(family = "Arial", face = "bold", size = 14, color = "black"),
+    axis.title = element_text(family = "Arial", face = "bold", size = 12),
+    legend.text = element_text(family = "Arial", face = "bold", size = 12),
+    legend.title = element_text(family = "Arial", face = "bold", size = 12))
+g4
+
+
+#ggsave(filename = paste0(name, "Subset_RatioOverConditionsyVer2.tiff"))
+
+```
+
+LineGraphs
+
+```{r}
+library(ggpattern)
+metadata <- alldata@meta.data
+
+cols = c("mediumblue", "turquoise", "coral2", "springgreen2", "gold2", "mediumpurple2", "orange2", "orchid2", "darkseagreen2" ,"olivedrab2", "grey")
+
+result_df <- metadata %>%
+  group_by(orig.ident, modality, metaclusters) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(orig.ident) %>%
+  mutate(TotalCount = sum(Count),
+         Proportion = Count / TotalCount) %>%
+  ungroup() %>%
+  group_by(modality, metaclusters) %>%
+  summarise(AverageCount = mean(Count, na.rm = TRUE),
+            Count_SD = sd(Count, na.rm = TRUE),
+            AverageProportion = mean(Proportion, na.rm = TRUE),
+            Proportion_SD = sd(Proportion, na.rm = TRUE), 
+            Percentage = AverageProportion * 100,
+            SD_Percentage = Proportion_SD * 100, .groups = "drop")
+
+ggplot(result_df, aes(x = metaclusters, y = AverageCount, fill = metaclusters)) +
+  geom_col_pattern(
+    aes(fill = metaclusters, pattern_density = modality),
+    colour          = 'black', 
+    size            = 0.5,  
+    position        = "stack",
+    pattern_fill    = 'white',
+    pattern_colour  = NA
+  ) +
+  theme_bw() +
+  scale_fill_manual(values = cols, guide = FALSE) +
+  labs(
+    x = "Cell Type",
+    y = "Average Number of Cells",
+    fill = "Cell Type"
+  )  + 
+  coord_flip() +
+  scale_pattern_manual(values = c(snRNAseq = "none", scRNAseq = "stripe", CITEseq = "circle")) +  # Specify patterns for modalities
+  scale_pattern_density_manual(values = c(snRNAseq = 0, scRNAseq = 0.5, CITEseq = 1)) +
+  theme(axis.text.y = element_text(size = 12), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+# Save the plot
+ggsave("Global_ModalityCelltype_Averages.tiff", width = 7, height = 7)
+
+ggplot(result_df, aes(x = metaclusters, y = AverageProportion, fill = modality)) +
+  geom_bar(
+    stat = "identity",
+    position = "fill",
+    colour = 'black',
+    size = 0.5) +
+  theme_bw()  +
+  labs(
+    x = "Cell Type",
+    y = "Average Proportion",
+    fill = "Modality"
+  ) +
+  coord_flip() +
+  theme(
+    axis.text.y = element_text(size = 12),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  scale_y_continuous(labels = scales::percent_format())  # Convert y-axis to percentage format
+
+# Save the plot
+ggsave("Global_ModalityCMetaclusters_Proportions.tiff", width = 7, height = 7)
+```
+
+Repeat above plot, faceted by timepoint
+
+```{r}
+result_df <- metadata %>%
+  group_by(orig.ident, timepoint, modality, metaclusters) %>%   # Include timepoint here
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(orig.ident, timepoint) %>%                      # Also include timepoint here
+  mutate(TotalCount = sum(Count),
+         Proportion = Count / TotalCount) %>%
+  ungroup() %>%
+  group_by(modality, timepoint, metaclusters) %>%              # Include timepoint in the final grouping
+  summarise(AverageCount = mean(Count, na.rm = TRUE),
+            Count_SD = sd(Count, na.rm = TRUE),
+            AverageProportion = mean(Proportion, na.rm = TRUE),
+            Proportion_SD = sd(Proportion, na.rm = TRUE), 
+            Percentage = AverageProportion * 100,
+            SD_Percentage = Proportion_SD * 100, .groups = "drop")
+
+ggplot(result_df, aes(x = metaclusters, y = AverageCount, fill = metaclusters)) +
+  geom_col_pattern(
+    aes(fill = metaclusters, pattern_density = modality),
+    colour          = 'black', 
+    size            = 0.5,  
+    position        = "stack",
+    pattern_fill    = 'white',
+    pattern_colour  = NA
+  ) +
+  theme_bw() +
+  scale_fill_manual(values = cols, guide = FALSE) +
+  labs(
+    x = "Cell Type",
+    y = "Average Number of Cells",
+    fill = "Cell Type"
+  )  + 
+  coord_flip() +
+  facet_wrap(~timepoint, ncol = 3) +
+  scale_pattern_manual(values = c(snRNAseq = "none", scRNAseq = "stripe", CITEseq = "circle")) +  # Specify patterns for modalities
+  scale_pattern_density_manual(values = c(snRNAseq = 0, scRNAseq = 0.5, CITEseq = 1)) +
+  theme(axis.text.y = element_text(size = 12), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+# Save the plot
+ggsave("Global_ModalityMetaclusters_Averages_TimepointFacet.tiff", width = 16, height = 14)
+
+```
+
+```{r}
+# Extract meta data information from unaltered data (alldata) and data downsampled to size of smallest batch (alldata_downsample)
+min.cells <- min(table(alldata$orig.ident))
+#Set identities to the meta data that we want to downsample on
+Idents(alldata) <- "orig.ident"
+#Subset the data, specifying that we want to downsample to the smallest batch size
+alldata_downsample <- subset(alldata, downsample = min.cells)
+#View the sizes of all the downsampled batches
+table(alldata_downsample$orig.ident)
+```
+
+```{r}
+# Extract meta data information from unaltered data (alldata) and data downsampled to size of smallest batch (alldata_downsample)
+metadata <- alldata@meta.data
+metadata_downsample <- alldata_downsample@meta.data
+
+# Set color palette
+pal <- c("royalblue2", "turquoise2", "deepskyblue2", "red2", "springgreen2", "gold2", "mediumpurple2", "orange2", "darkseagreen2", "orchid2", "magenta2", "tomato3")
+
+# Calculate counts, average counts, count SD, proportions, average proportions, and proportion SD in one pipeline for NOT downsampled data
+result_df <- metadata %>%
+  group_by(orig.ident, timepoint, metaclusters) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(orig.ident) %>%
+  mutate(TotalCount = sum(Count),
+         Proportion = Count / TotalCount) %>%
+  ungroup() %>%
+  group_by(timepoint,metaclusters) %>%
+  summarise(AverageCount = mean(Count, na.rm = TRUE),
+            Count_SD = sd(Count, na.rm = TRUE),
+            AverageProportion = mean(Proportion, na.rm = TRUE),
+            Proportion_SD = sd(Proportion, na.rm = TRUE), 
+            Percentage = AverageProportion * 100,
+            SD_Percentage = Proportion_SD * 100, .groups = "drop")
+
+# Calculate counts, average counts, count SD, proportions, average proportions, and proportion SD in one pipeline for downsampled data
+result_df_down <- metadata_downsample %>%
+  group_by(orig.ident, timepoint, metaclusters) %>%
+  summarise(Count = n(), .groups = "drop") %>%
+  group_by(orig.ident) %>%
+  mutate(TotalCount = sum(Count),
+         Proportion = Count / TotalCount) %>%
+  ungroup() %>%
+  group_by(timepoint, metaclusters) %>%
+  summarise(AverageCount = mean(Count, na.rm = TRUE),
+            Count_SD = sd(Count, na.rm = TRUE),
+            AverageProportion = mean(Proportion, na.rm = TRUE),
+            Proportion_SD = sd(Proportion, na.rm = TRUE), 
+            Percentage = AverageProportion * 100,
+            SD_Percentage = Proportion_SD * 100, .groups = "drop")
+
+# Define the correct order of timepoints
+timepoint_levels <- c("Unwounded", "Wounded_D1PW", "Wounded_D2PW", "Wounded_D4PW", "Wounded_D7PW", "Wounded_D15PW", "Wounded_D30PW")
+
+# Ensure that timepoint columns are factors with the correct levels
+result_df$timepoint <- factor(result_df$timepoint, levels = timepoint_levels)
+result_df_down$timepoint <- factor(result_df_down$timepoint, levels = timepoint_levels)
+
+# Create ggplot for average cell type counts with error bars (downsampled data)
+ggplot(result_df, aes(x = timepoint, y = AverageCount, color = metaclusters, group = metaclusters)) +
+  geom_ribbon(aes(ymin = AverageCount - Count_SD, ymax = AverageCount + Count_SD, fill = metaclusters), alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  #geom_errorbar(aes(ymin = AverageCount - SD, ymax = AverageCount + SD), width = 0.2) + #Can include error bars if desired
+  facet_wrap(~ metaclusters, scales = "free_y") +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.x = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.y = element_text(size = 11, family = "Arial", face = "bold"),
+    strip.text = element_text(size = 11, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 11, family = "Arial", face = "bold", hjust = 0.5)
+  )  +
+  labs(title = "Average Cell Type Counts Over Time",
+       x = "Timepoint",
+       y = "Average Cell Count") +
+  NoLegend()
+ggsave("Global_AverageCelltypeCount.tiff", width = 9, height = 5.5)
+
+# Create ggplot for average cell type counts with error ribbon (downsampled data)
+ggplot(result_df_down, aes(x = timepoint, y = AverageCount, color = metaclusters, group = metaclusters)) +
+  geom_ribbon(aes(ymin = AverageCount - Count_SD, ymax = AverageCount + Count_SD, fill = metaclusters), alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  #geom_errorbar(aes(ymin = AverageCount - SD, ymax = AverageCount + SD), width = 0.2) + #Can include error bars if desired
+  facet_wrap(~ metaclusters, scales = "free_y") +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.x = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.y = element_text(size = 11, family = "Arial", face = "bold"),
+    strip.text = element_text(size = 11, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 11, family = "Arial", face = "bold", hjust = 0.5)
+  )  +
+  labs(title = "Average Downsampled Cell Type Counts Over Time",
+       x = "Timepoint",
+       y = "Average Cell Count") +
+  NoLegend()
+ggsave("Global_AverageCelltypeCount_Downsampled.tiff", width = 9, height = 5.5)
+
+#Create ggplot for proportions over time
+ggplot(result_df, aes(x = timepoint, y = Percentage, color = metaclusters, group = metaclusters)) +
+  geom_ribbon(aes(ymin = Percentage - SD_Percentage, ymax = Percentage + SD_Percentage, fill = metaclusters), alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ metaclusters, scales = "free_y") +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.x = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.y = element_text(size = 11, family = "Arial", face = "bold"),
+    strip.text = element_text(size = 11, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 11, family = "Arial", face = "bold", hjust = 0.5)
+  ) +
+  labs(title = "Average Cell Type Proportions Over Time",
+       x = "Timepoint",
+       y = "Average Proportion (% of Total)") +
+  NoLegend()
+ggsave("Global_AverageCelltypeProp.tiff", width = 9, height = 5.5)
+
+#Create ggplot for proportions over time using downsampled data
+ggplot(result_df_down, aes(x = timepoint, y = Percentage, color = metaclusters, group = metaclusters)) +
+  geom_ribbon(aes(ymin = Percentage - SD_Percentage, ymax = Percentage + SD_Percentage, fill = metaclusters), alpha = 0.2) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ metaclusters, scales = "free_y") +
+  scale_color_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.x = element_text(size = 11, family = "Arial", face = "bold"),
+    axis.title.y = element_text(size = 11, family = "Arial", face = "bold"),
+    strip.text = element_text(size = 11, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 11, family = "Arial", face = "bold", hjust = 0.5)
+  ) +
+  labs(
+    title = "Averaged Downsampled Cell Type Proportions Over Time",
+    x = "Timepoint",
+    y = "Average Proportion (% of Total)"
+  ) +
+  NoLegend()
+
+ggsave("Global_AverageCelltypeProp_Downsampled.tiff", width = 9, height = 5.5)
+#Save the dataframe as an xlsx file
+writexl::write_xlsx(list(result_df, result_df_down), "Global_CellCountsProps.xlsx")
+
+```
+
+```{r}
+alldata <- BuildClusterTree(alldata, reduction = "pca")
+PlotClusterTree(alldata, direction = "rightwards")
+tiff("GlobalSubset_PhyloTree.tiff")
+dev.off()
+```
+
+```{r}
+
+set.seed()
+levels(alldata$orig.ident)
+pal <- c("royalblue2", "turquoise2", "deepskyblue2", "red2", "springgreen2", "gold2", "mediumpurple2", "orange2", "darkseagreen2", "orchid2", "magenta2", "tomato3")
+
+# Define the specific orig.ident values to keep
+selected_orig_idents <- c("UW_Haensel1", "UW_Haensel2", "UW_Vu_v3","UW_Joost_1","D1PW_Justynski",
+                          "D2PW_Justynski","D4PW_Haensel1", "D4PW_Haensel2", "D4PW_Haensel3", "D4PW_Vu_v3","D7PW_Vu_v2_1", "D7PW_Vu_v2_2", "D7PW_Vu_v3")
+
+# Subset the Seurat object using the specified orig.ident values
+alldata_subset <- subset(alldata, subset = orig.ident %in% selected_orig_idents)
+
+alldata_subset <- IntegrateLayers(
+  object = alldata_subset, 
+  method = RPCAIntegration, 
+  normalization.method = "SCT", 
+  orig.reduction = "pca", 
+  new.reduction = "rpca",
+  verbose = F)
+
+pcs = npcs(alldata_subset, var.total = 0.9)
+ 
+alldata_subset <- FindNeighbors(alldata_subset, reduction = "rpca", dims = 1:pcs) %>% 
+  FindClusters(resolution = 1, cluster.name = "rpca_clusters") %>%
+  RunUMAP(reduction = "rpca", dims = 1:pcs, reduction.name = "umap.rpca")
+
+Idents(alldata_subset) = alldata_subset$metaclusters
+DimPlot(alldata_subset, cols = pal, reduction = "umap.rpca", pt.size = .3, label = F) + NoLegend() + NoAxes() 
+ggsave("UMAPPublicAvaibleData.tiff")
+
+
+#Subset Singel Nuceli Data
+# Subset the Seurat object using the specified orig.ident values
+alldata_subset <- subset(alldata, subset = modality %in% "snRNAseq")
+
+alldata_subset <- IntegrateLayers(
+  object = alldata_subset, 
+  method = RPCAIntegration, 
+  normalization.method = "SCT", 
+  orig.reduction = "pca", 
+  new.reduction = "rpca",
+  verbose = F)
+
+pcs = npcs(alldata_subset, var.total = 0.9)
+ 
+alldata_subset <- FindNeighbors(alldata_subset, reduction = "rpca", dims = 1:pcs) %>% 
+  FindClusters(resolution = 1, cluster.name = "rpca_clusters") %>%
+  RunUMAP(reduction = "rpca", dims = 1:pcs, reduction.name = "umap.rpca")
+
+Idents(alldata_subset) = alldata_subset$metaclusters
+DimPlot(alldata_subset, cols = pal, reduction = "umap.rpca", pt.size = .3, label = F) + NoLegend() + NoAxes() 
+ggsave("UMAPSingleNuceliData.tiff")
+
+# Subset the CITEseq data and make individual UMAP
+alldata_subset <- subset(alldata, subset = modality %in% "CITEseq")
+
+alldata_subset <- IntegrateLayers(
+  object = alldata_subset, 
+  method = RPCAIntegration, 
+  normalization.method = "SCT", 
+  orig.reduction = "pca", 
+  new.reduction = "rpca",
+  verbose = F)
+
+pcs = npcs(alldata_subset, var.total = 0.9)
+ 
+alldata_subset <- FindNeighbors(alldata_subset, reduction = "rpca", dims = 1:pcs) %>% 
+  FindClusters(resolution = 1, cluster.name = "rpca_clusters") %>%
+  RunUMAP(reduction = "rpca", dims = 1:pcs, reduction.name = "umap.rpca")
+
+Idents(alldata_subset) = alldata_subset$metaclusters
+DimPlot(alldata_subset, cols = pal, reduction = "umap.rpca", pt.size = .3, label = F) + NoLegend() + NoAxes() 
+ggsave("UMAPCITEseqData.tiff")
+
+
+```
+
+Differential Expression
+
+```{r Differential Expression}
+run_DE_analysis <- function(alldata, cell_types) {
+  # Load required libraries
+  library(DElegate)
+  library(clusterProfiler)
+  library(org.Mm.eg.db)
+  library(ggplot2)
+  library(dplyr)
+  library(Seurat)
+  
+  for (cell_type in cell_types) {
+    # Subset data based on the specified cell type
+    Idents(alldata) <- "metaclusters"
+    alldata.1 <- subset(alldata, ident = c(cell_type))
+    
+    # Perform DE analysis for different comparisons
+    de_results.04 <- DElegate::findDE(
+      object = alldata.1, 
+      compare = c("D4PW", "UW"),
+      method = "deseq",
+      group_column = "timepoint",
+      replicate_column = "orig.ident"
+    )
+    
+    de_results.47 <- DElegate::findDE(
+      object = alldata.1, 
+      compare = c("D7PW", "D4PW"),
+      method = "deseq",
+      group_column = "timepoint",
+      replicate_column = "orig.ident"
+    )
+    
+    de_results.715 <- DElegate::findDE(
+      object = alldata.1, 
+      compare = c("D15PW", "D7PW"),
+      method = "deseq",
+      group_column = "timepoint",
+      replicate_column = "orig.ident"
+    )
+    
+    de_results.1530 <- DElegate::findDE(
+      object = alldata.1, 
+      compare = c("D30PW", "D15PW"),
+      method = "deseq",
+      group_column = "timepoint",
+      replicate_column = "orig.ident"
+    )
+    
+    # Save DE results as CSV files
+    write.csv(de_results.04, file = paste0("DE_results_", gsub(" ", "_", cell_type), "_UWOvsD4PW.csv"), row.names = FALSE)
+    write.csv(de_results.47, file = paste0("DE_results_", gsub(" ", "_", cell_type), "_D4PWvsD7PW.csv"), row.names = FALSE)
+    write.csv(de_results.715, file = paste0("DE_results_", gsub(" ", "_", cell_type), "_D7PWvsD15PW.csv"), row.names = FALSE)
+    write.csv(de_results.1530, file = paste0("DE_results_", gsub(" ", "_", cell_type), "_D15PWvsD30PW.csv"), row.names = FALSE)
+    
+    # Set filtering thresholds
+    x <- 1
+    y <- 0.01
+    
+    # Subset DE results based on thresholds
+    res.04 <- subset(de_results.04, padj < y & log_fc > x)
+    res.47 <- subset(de_results.47, padj < y & log_fc > x)
+    res.715 <- subset(de_results.715, padj < y & log_fc > x)
+    res.1530 <- subset(de_results.1530, padj < y & log_fc > x)
+    
+    # Convert SYMBOL to ENTREZID
+    ids.04 <- bitr(res.04$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+    ids.47 <- bitr(res.47$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+    ids.715 <- bitr(res.715$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+    ids.1530 <- bitr(res.1530$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+    
+    # Create a gene list
+    genelist <- list(
+      UWOvsD4PW = ids.04$ENTREZID,
+      D4PWvsD7PW = ids.47$ENTREZID,
+      D7PWvsD15PW = ids.715$ENTREZID,
+      D15PWvsD30PW = ids.1530$ENTREZID
+    )
+    
+    # Run ClusterProfiler
+    ck <- compareCluster(geneCluster = genelist, fun = enrichGO, OrgDb = org.Mm.eg.db,
+                         pvalueCutoff = 0.05, ont = "BP")
+    ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
+    
+    # Plot dotplot
+    s1 <- dotplot(ck, showCategory = 5, font.size = 12, label_format = 100) + 
+      theme(plot.margin = grid::unit(c(0, 0, 0, 0), "mm"))
+    
+    s2 <- s1 + 
+      theme(axis.text.x = element_text(size = 12, face = "bold", color = "black", angle = 45)) + 
+      theme(axis.text.y = element_text(size = 12, face = "bold", color = "black"))
+    
+    print(s2)
+    
+    # Save plot
+    ggsave(paste0("GO_", gsub(" ", "_", cell_type), ".tiff"), width = 10, height = 5)
+    
+    # Save cluster summary to a CSV file
+    cluster_summary <- data.frame(ck)
+    write.csv(cluster_summary, file = paste0("GO_", gsub(" ", "_", cell_type), ".csv"), row.names = FALSE)
+  }
+}
+
+# Define cell types to iterate over
+cell_types <- c("Keratinocytes", "Immune", "Sebocytes", "Fibroblasts",
+                "Schwann cells", "Endothelial", "Pericytes",
+                "Muscle", "Melanocytes", "Adipocytes")
+
+# Run the function
+run_DE_analysis(alldata, cell_types)
+
+
+```
+
+Running GO using FindMarkers for Each Timepoint
+
+```{r}
+
+#Differntial Expression
+library(clusterProfiler)
+library(org.Mm.eg.db)
+#Perform Gene Ontology Anaylsis for Each Individual Timepoint Upregulated using Find Markers
+Idents(alldata.1) <- "timepoint"
+DefaultAssay(alldata.1) <- "RNA"
+
+#Find markers for celltype
+cellmarkers <- FindAllMarkers(alldata.1, min.pct = 0.5, recorrect_umi = F, only.pos = T)
+
+
+res.uwo = subset(cellmarkers, cluster == "Unwounded", avg_log2FC > 1)
+res.wo4 = subset(cellmarkers, cluster == "Wounded_D4PW", avg_log2FC > 1)
+res.wo7 = subset(cellmarkers, cluster == "Wounded_D7PW", avg_log2FC > 1)
+res.wo15 = subset(cellmarkers, cluster == "Wounded_D15PW", avg_log2FC > 1)
+res.wo30 = subset(cellmarkers, cluster == "Wounded_D30PW", avg_log2FC > 1)
+
+
+ids.uwo<-bitr(res.uwo$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.wo4<-bitr(res.wo4$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.wo7<-bitr(res.wo7$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.wo15<-bitr(res.wo15$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.wo30<-bitr(res.wo30$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+
+genelist = list(UWO = ids.uwo$ENTREZID, 
+           D4PW = ids.wo4$ENTREZID,
+           D7PW = ids.wo7$ENTREZID,
+           D15PW = ids.wo15$ENTREZID,
+           D30PW = ids.wo30$ENTREZID)
+           
+
+# Run ClusterProifler
+
+ck <- compareCluster(geneCluster = genelist, fun = enrichGO, OrgDb = org.Mm.eg.db, pvalueCutoff = 0.05, ont = "BP")
+
+ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType="ENTREZID")
+dotplot(ck) 
+ck <- simplify(ck)
+
+s1 = dotplot(ck, showCategory = 10, font.size = 18, label_format = 100)
+s1 = s1 + theme(plot.margin=grid::unit(c(0,0,0,0), "mm"))
+s2 = s1 + theme(axis.text.x = element_text(size=18, face="bold", color = "black"))
+s2 = s2 + theme(axis.text.y = element_text(size=18, face="bold", color = "black"))
+s2
+
+
+# Convert to data.frame
+ck_df <- as.data.frame(ck)
+
+# Find unique pathways for each cluster
+unique_df <- ck_df %>%
+  group_by(ID) %>%
+  filter(n_distinct(Cluster) == 1) %>%
+  ungroup()
+
+
+ck@compareClusterResult <- unique_df
+ck <- simplify(ck)
+
+# Create plot
+s1 <- dotplot(ck, showCategory = 5, font.size = 12, label_format = 100) +
+  scale_color_gradientn(colors = c("blue", "white", "red")) +  # Blue to red gradient
+  theme(plot.margin = grid::unit(c(0, 0, 0, 0), "mm"))
+
+s2 <- s1 +
+  theme(
+    axis.text.x = element_text(size = 12, face = "bold", color = "black", angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 12, face = "bold", color = "black")
+  )
+
+s2 + customtheme
+
+
+ggsave("GeneOntologyGlobalPathwaysOvertime5Pathways.png", width = 12, height = 7)
+
+ck_df <- as.data.frame(ck)
+
+# Save to CSV
+write.csv(ck_df, file = "GlobalGOcompareCluster_results.csv", row.names = FALSE)
+
+```
+
+
+```{r Gene Ontology TimeCourse Adipocytes}
+library(dplyr) 
+library(ggplot2)
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Adipocytes.csv")
+
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster     = factor(Cluster,     levels = unique(Cluster)),
+    Description = factor(Description, levels = unique(Description))
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "olivedrab3",
+    high = "olivedrab4",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_AdipocytesOvertimeDotplot.png", p, width = 10, height = 5)
+
+```
+
+```{r Gene Ontology TimeCourse Endothelial}
+library(dplyr) 
+library(ggplot2)
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Endothelial_cells.csv")
+
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "gold2",
+    high = "gold3",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_EndothelialOvertimeDotplot.png", p, width = 10, height = 10)
+
+```
+
+```{r Gene Ontology TimeCourse Fibroblasts}
+library(dplyr) 
+library(ggplot2)
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology (Delegate By Metacluster)/Fibroblasts_GO_Upregulated.csv")
+
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("DPW4vsUWO", "DPW7vsD4PW", "DPW15vsD7PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "coral2",
+    high = "coral4",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_FibroblastsOvertimeDotplot.png", p, width = 10, height = 10)
+
+```
+
+```{r Gene Ontology TimeCourse HF}
+library(dplyr) 
+library(ggplot2)
+library(clusterProfiler)
+
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_HF.csv")
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "skyblue1",
+    high = "skyblue3",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_HFOvertimeDotplot.png", p, width = 10, height = 10)
+
+```
+
+```{r Gene Ontology TimeCourse IFE }
+library(dplyr) 
+library(ggplot2)
+library(clusterProfiler)
+
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_IFE.csv")
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "royalblue1",
+    high = "royalblue4",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_IFEOvertimeDotplot.png", p, width = 10, height = 10)
+
+```
+
+```{r Gene Ontology TimeCourse Immune Cells }
+library(dplyr) 
+library(ggplot2)
+library(clusterProfiler)
+
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Immune cells.csv")
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "springgreen1",
+    high = "springgreen4",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_ImmuneCellsOvertimeDotplot.png", p, width = 10, height = 10)
+
+```
+
+```{r Gene Ontology TimeCourse Melanocytes }
+library(dplyr) 
+library(ggplot2)
+library(clusterProfiler)
+
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Melanocytes.csv")
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "orchid1",
+    high = "orchid4",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_MelanocytesOvertimeDotplot.png", p, width = 10, height = 10)
+```
+
+```{r Gene Ontology TimeCourse Muscle Cells }
+library(dplyr) 
+library(ggplot2)
+library(clusterProfiler)
+
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Muscle_cells.csv")
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "orange1",
+    high = "orange3",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_MuscleCellsOvertimeDotplot.png", p, width = 10, height = 10)
+```
+
+```{r Gene Ontology TimeCourse Perciytes}
+library(dplyr) 
+library(ggplot2)
+library(clusterProfiler)
+
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Pericytes.csv")
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "mediumpurple1",
+    high = "mediumpurple4",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_PericytesOvertimeDotplot.png", p, width = 10, height = 10)
+```
+
+```{r Gene Ontology TimeCourse RBCs}
+library(dplyr) 
+library(ggplot2)
+library(clusterProfiler)
+
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_RBCs.csv")
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "tomato1",
+    high = "tomato4",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_RBCsOvertimeDotplot.png", p, width = 10, height = 10)
+```
+
+```{r Gene Ontology TimeCourse Schwann Cellss}
+library(dplyr) 
+library(ggplot2)
+library(clusterProfiler)
+
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Schwann cells.csv")
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "seagreen1",
+    high = "seagreen4",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_SchwannCellsOvertimeDotplot.png", p, width = 10, height = 10)
+```
+
+
+```{r Gene Ontology TimeCourse Sebocytes}
+library(dplyr) 
+library(ggplot2)
+library(clusterProfiler)
+
+gene.ont = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Sebocytes.csv")
+
+top_n <- 10
+
+top_go <- gene.ont %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = top_n, with_ties = FALSE) %>%
+  ungroup()
+
+
+
+# (optional) ensure plotting order matches your data
+top_go <- top_go %>%
+  mutate(
+    Cluster = factor(Cluster, levels = c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")),
+    Description = factor(Description, levels = unique(Description))  # preserves order of appearance
+  )
+
+p <- ggplot(top_go, aes(x = Cluster, 
+                        y = Description)) +
+  geom_point(
+    aes(size = Count, fill = pvalue),
+    shape  = 21,        # circle with fill & outline
+    color  = "black",   # dot outline
+    stroke = 0.5        # outline thickness
+  ) +
+  scale_fill_gradient(
+    low  = "deepskyblue1",
+    high = "deepskyblue4",
+    name = "p‑value"
+  ) +
+  scale_size_continuous(name = "Gene count") +
+  theme_bw(base_size = 14) +
+  theme(
+    text            = element_text(family = "Arial", face = "bold", color = "black"),
+    axis.text.x     = element_text(angle = 45, hjust = 1, color = "black"),
+    axis.text.y     = element_text(hjust = 1, color = "black"),
+    axis.title      = element_blank(),
+    panel.grid      = element_blank(),
+    legend.position = "right"
+  ) +
+  ggtitle("Top GO pathways per condition")
+
+# display
+print(p)
+
+# save
+ggsave("GO_SeboctytesOvertimeDotplot.png", p, width = 10, height = 10)
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+#Perform Gene Ontology Anaylsis for Each Individual Timepoint Upregulated using Find Markers
+Idents(alldata) <- "timepoint"
+DefaultAssay(alldata) <- "RNA"
+
+#Find markers for celltype
+cellmarkers <- FindAllMarkers(alldata, min.pct = 0.2, recorrect_umi = F, only.pos = T)
+
+# Subset for each condition with avg_log2FC > 1 and pct.1 > 0.3
+res.uwo <- subset(cellmarkers, cluster == "Unwounded" & avg_log2FC > 0 & pct.1 > 0.1)
+res.wo4 <- subset(cellmarkers, cluster == "Wounded_D4PW" & avg_log2FC > 1 & pct.1 > 0.1)
+res.wo7 <- subset(cellmarkers, cluster == "Wounded_D7PW" & avg_log2FC > 0.5 & pct.1 > 0.1)
+res.wo15 <- subset(cellmarkers, cluster == "Wounded_D15PW" & avg_log2FC > 0 & pct.1 > 0.1)
+res.wo30 <- subset(cellmarkers, cluster == "Wounded_D30PW" & avg_log2FC > 0 & pct.1 > 0.1)
+
+# Get top 20 genes by avg_log2FC for each condition
+top.uwo <- head(res.uwo[order(-res.uwo$avg_log2FC), ], 30)
+top.wo4 <- head(res.wo4[order(-res.wo4$avg_log2FC), ], 30)
+top.wo7 <- head(res.wo7[order(-res.wo7$avg_log2FC), ], 30)
+top.wo15 <- head(res.wo15[order(-res.wo15$avg_log2FC), ], 30)
+top.wo30 <- head(res.wo30[order(-res.wo30$avg_log2FC), ], 30)
+
+# Optionally, bind all together into one dataframe with a column for the condition
+top.genes <- rbind(
+  transform(top.uwo, condition = "Unwounded"),
+  transform(top.wo4, condition = "Wounded_D4PW"),
+  transform(top.wo7, condition = "Wounded_D7PW"),
+  transform(top.wo15, condition = "Wounded_D15PW"),
+  transform(top.wo30, condition = "Wounded_D30PW")
+)
+
+# View or extract just gene names if needed
+genes <- unique(top.genes$gene)
+
+alldata <- ScaleData(alldata, features = genes)
+genes <- setdiff(genes, c("Fth1", "Gm42418"))
+
+p1 = DoHeatmap(alldata, features = genes, size = 5, group.by = "timepoint") + 
+  scale_fill_gradientn(colors = rev(RColorBrewer::brewer.pal(n = 7, name = "RdBu"))) +
+  theme(
+    axis.text.x = element_text(face = "bold", size = 12, family = "Arial"),
+    axis.text.y = element_text(face = "bold", size = 12, family = "Arial"),
+    legend.text = element_text(face = "bold", size = 12, family = "Arial"),
+    legend.title = element_text(face = "bold", size = 12, family = "Arial"),
+    plot.title = element_text(face = "bold", size = 12, family = "Arial"),
+    strip.text = element_text(face = "bold", size = 12, family = "Arial")
+  )
+
+ggsave("HeatmapAcrossTimepointMajorMarkers.png", p1, width = 20, height = 25)
+
+
+# Generate the DotPlot
+library(Seurat)
+library(ggplot2)
+library(RColorBrewer)
+
+# Create initial DotPlot to get the data
+p <- DotPlot(alldata, features = unique(genes), dot.scale = 7, group.by = "timepoint_modality")
+plot_data <- p$data  # Extract DotPlot data
+
+# Invert red and blue in the RdYlBu palette
+inverted_colors <- rev(brewer.pal(n = 11, name = "RdYlBu"))
+
+# Rebuild the plot with black outlines and inverted colors
+p <- ggplot(plot_data, aes(x = id, y = features.plot)) +
+  geom_point(
+    aes(size = pct.exp, fill = avg.exp.scaled),
+    shape = 21,         # filled circle
+    color = "black",    # black outline
+    stroke = 0.5
+  ) +
+  scale_fill_gradientn(colors = inverted_colors) +
+  scale_size(range = c(0, 7)) +
+  theme_bw() +
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 12, face = "bold", family = "Arial"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.title = element_text(face = "bold", family = "Arial"),
+    legend.text = element_text(family = "Arial")
+  ) +
+  guides(
+    fill = guide_colorbar(title = "Average Expression"),
+    size = guide_legend(title = "Percent Expressed")
+  ) +
+  labs(x = "Timepoint", y = "Gene") + customtheme
+
+ggsave("DotPlotAcrossTimePointModalityMajorMarkers.png", p, height = 20, width = 8)
+
+
+
+
+```
+
+```{r}
+
+```
+
+
+
+```{r}
+#Load PSU Dataset
+alldata.1 = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 1-2/PSUUnit.rds")
+#Change identity levels so that they are grouped without cell cluster
+Idents(alldata.1) <- gsub("\\s+[IVX]+$", "", Idents(alldata))
+Idents(alldata.1) <- gsub("\\s+[0-9]+$", "", Idents(alldata))
+levels(alldata.1)
+```
+
+Run GSEA analysis
+
+```{r}
+library(clusterProfiler)
+library(DElegate)
+library(org.Mm.eg.db)
+
+
+celltype <- "PSU"
+#In case the celltype column in the metadata has a different name 
+identity_metadata <- "celltype"
+
+
+alldata$celltype <- Idents(alldata)
+
+alldata.1 <- subset(alldata, idents = "PSU")
+
+
+de_results.04 <- DElegate::findDE(object = alldata.1, compare = c("Wounded_DPW4","Unwounded"), method = "deseq", group_column = "timepoint",replicate_column = "orig.ident")
+de_results.47 <- DElegate::findDE(object = alldata.1, compare = c("Wounded_DPW7","Wounded_D4PW"), method = "deseq", group_column = "timepoint",replicate_column = "orig.ident")
+de_results.715 <- DElegate::findDE(object = alldata.1, compare = c("Wounded_DPW15","Wounded_D7PW"), method = "deseq", group_column = "timepoint",replicate_column = "orig.ident")
+de_results.1530 <- DElegate::findDE(object = alldata.1, compare = c("Wounded_DPW30","Wounded_D15PW"), method = "deseq", group_column = "timepoint",replicate_column = "orig.ident")
+
+
+
+x = 1
+y = .01
+
+res.01 = subset(de_results.01, log_fc > x & pvalue < y)
+res.02 = subset(de_results.02, log_fc > x & pvalue < y)
+res.04 = subset(de_results.04, log_fc > x & pvalue < y)
+res.07 = subset(de_results.07, log_fc > x & pvalue < y)
+res.015 = subset(de_results.015, log_fc > x & pvalue < y)
+res.030 = subset(de_results.030, log_fc > x & pvalue < y)
+
+
+res.47 = intersect(res.04$feature,res.07$feature)
+res.715 = intersect(res.04$feature,res.07$feature)
+
+ids.04<-bitr(res.04$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.07<-bitr(res.07$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.015<-bitr(res.015$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.030<-bitr(res.030$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+
+
+genelist = list(UWOvsDPW4 = ids.04$ENTREZID, 
+           UWOvsDPW7 = ids.07$ENTREZID,
+           UWOvsDPW15 = ids.015$ENTREZID,
+           UWOvsDPW30 = ids.030$ENTREZID)
+
+# Run ClusterProifler
+
+ck <- compareCluster(geneCluster = genelist, fun = enrichGO, OrgDb = org.Mm.eg.db, pvalueCutoff = 0.05, ont = "BP")
+
+ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType="ENTREZID")
+dotplot(ck) 
+s1 = dotplot(ck, showCategory = 10, font.size = 18, label_format = 100)
+s1 = s1 + theme(plot.margin=grid::unit(c(0,0,0,0), "mm"))
+s2 = s1 + theme(axis.text.x = element_text(size=18, face="bold", color = "black"))
+s2 = s2 + theme(axis.text.y = element_text(size=18, face="bold", color = "black"))
+s2
+
+ggsave("PSUDotPlotUpregulatedGenesBetweenTimepoints.tiff", width = 16)
+
+x = -1
+y = .01
+
+res.01 = subset(de_results.01, log_fc > x & pvalue < y)
+res.02 = subset(de_results.02, log_fc > x & pvalue < y)
+res.04 = subset(de_results.04, log_fc > x & pvalue < y)
+res.07 = subset(de_results.07, log_fc > x & pvalue < y)
+res.015 = subset(de_results.015, log_fc > x & pvalue < y)
+res.030 = subset(de_results.030, log_fc > x & pvalue < y)
+
+
+res.47 = intersect(res.04$feature,res.07$feature)
+res.715 = intersect(res.04$feature,res.07$feature)
+
+ids.04<-bitr(res.04$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.07<-bitr(res.07$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.015<-bitr(res.015$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+ids.030<-bitr(res.030$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Mm.eg.db)
+
+
+genelist = list(UWOvsDPW4 = ids.04$ENTREZID, 
+           UWOvsDPW7 = ids.07$ENTREZID,
+           UWOvsDPW15 = ids.015$ENTREZID,
+           UWOvsDPW30 = ids.030$ENTREZID)
+
+# Run ClusterProifler
+
+ck <- compareCluster(geneCluster = genelist, fun = enrichGO, OrgDb = org.Mm.eg.db, pvalueCutoff = 0.05, ont = "BP")
+
+ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType="ENTREZID")
+dotplot(ck) 
+s1 = dotplot(ck, showCategory = 10, font.size = 18, label_format = 100)
+s1 = s1 + theme(plot.margin=grid::unit(c(0,0,0,0), "mm"))
+s2 = s1 + theme(axis.text.x = element_text(size=18, face="bold", color = "black"))
+s2 = s2 + theme(axis.text.y = element_text(size=18, face="bold", color = "black"))
+s2
+
+ggsave("PSUDotPlotDownreuglatedGenesBetweenTimepoints.tiff", width = 16)
+```
+
+```{r R loop for determining Gene Ontology Enrichment For Each Metacluster}
+library(clusterProfiler)
+library(DElegate)
+library(org.Mm.eg.db)
+library(ggplot2)
+library(dplyr)
+
+# Define cell types
+cell_types <- c(
+  "IFE Keratinocytes", "HF Keratinocytes", "Sebocytes", "Fibroblasts",
+  "Immune", "Endothelial", "Pericytes", "Muscle",
+  "Melanocytes", "Schwann cells", "Adipocytes", "RBCs"
+)
+
+# Timepoint comparisons
+comparisons <- list(
+  "DPW4vsUWO"    = c("Wounded_D4PW", "Unwounded"),
+  "DPW7vsD4PW"   = c("Wounded_D7PW", "Wounded_D4PW"),
+  "DPW15vsD7PW"  = c("Wounded_D15PW", "Wounded_D7PW"),
+  "DPW30vsD15PW" = c("Wounded_D30PW", "Wounded_D15PW")
+)
+
+# Prepare DE analysis for each cell type
+for (celltype in cell_types) {
+  message("Processing: ", celltype)
+  
+  alldata$celltype <- Idents(alldata)
+  alldata_subset <- subset(alldata, ident = celltype)
+  
+  celltype_clean <- gsub(" ", "_", celltype)
+  de_list <- list()
+
+  # --- Differential Expression ---
+  for (comp_name in names(comparisons)) {
+    comp <- comparisons[[comp_name]]
+
+    de_result <- tryCatch({
+      DElegate::findDE(
+        object = alldata_subset,
+        compare = comp,
+        method = "deseq",
+        group_column = "timepoint"
+      )
+    }, error = function(e) {
+      warning("Skipping comparison ", comp_name, " due to error: ", e$message)
+      return(NULL)
+    })
+
+    if (!is.null(de_result)) {
+      write.csv(de_result, paste0(celltype_clean, "_", comp_name, "_DE_results.csv"), row.names = FALSE)
+    }
+
+    de_list[[comp_name]] <- de_result
+  }
+
+  # ---- UPREGULATED ----
+  up_genelist <- list()
+  for (comp_name in names(de_list)) {
+    de_df <- de_list[[comp_name]]
+    if (!is.null(de_df)) {
+      up_df <- subset(de_df, log_fc > 1 & pvalue < 0.01)
+      if (nrow(up_df) > 0) {
+        entrez <- bitr(up_df$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+        up_genelist[[comp_name]] <- entrez$ENTREZID
+      }
+    }
+  }
+
+  if (length(up_genelist) > 0) {
+    ck_up <- compareCluster(
+      geneCluster = up_genelist,
+      fun = enrichGO,
+      OrgDb = org.Mm.eg.db,
+      pvalueCutoff = 0.05,
+      ont = "BP"
+    )
+    ck_up <- setReadable(ck_up, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
+
+    # Save GO enrichment results
+    write.csv(as.data.frame(ck_up), paste0(celltype_clean, "_GO_Upregulated.csv"), row.names = FALSE)
+
+    s2_up <- dotplot(ck_up, showCategory = 10, font.size = 18, label_format = 100) +
+      theme(
+        plot.margin = grid::unit(c(0, 0, 0, 0), "mm"),
+        axis.text.x = element_text(size = 18, face = "bold", color = "black"),
+        axis.text.y = element_text(size = 18, face = "bold", color = "black")
+      )
+
+    ggsave(
+      filename = paste0(celltype_clean, "_DotPlot_Upregulated_Timepoints.png"),
+      plot = s2_up,
+      width = 16,
+      height = 20
+    )
+  }
+
+  # ---- DOWNREGULATED ----
+  down_genelist <- list()
+  for (comp_name in names(de_list)) {
+    de_df <- de_list[[comp_name]]
+    if (!is.null(de_df)) {
+      down_df <- subset(de_df, log_fc < -1 & pvalue < 0.01)
+      if (nrow(down_df) > 0) {
+        entrez <- bitr(down_df$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+        down_genelist[[comp_name]] <- entrez$ENTREZID
+      }
+    }
+  }
+
+  if (length(down_genelist) > 0) {
+    ck_down <- compareCluster(
+      geneCluster = down_genelist,
+      fun = enrichGO,
+      OrgDb = org.Mm.eg.db,
+      pvalueCutoff = 0.05,
+      ont = "BP"
+    )
+    ck_down <- setReadable(ck_down, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
+
+    # Save GO enrichment results
+    write.csv(as.data.frame(ck_down), paste0(celltype_clean, "_GO_Downregulated.csv"), row.names = FALSE)
+
+    s2_down <- dotplot(ck_down, showCategory = 10, font.size = 18, label_format = 100) +
+      theme(
+        plot.margin = grid::unit(c(0, 0, 0, 0), "mm"),
+        axis.text.x = element_text(size = 18, face = "bold", color = "black"),
+        axis.text.y = element_text(size = 18, face = "bold", color = "black")
+      )
+
+    ggsave(
+      filename = paste0(celltype_clean, "_DotPlot_Downregulated_Timepoints.png"),
+      plot = s2_down,
+      width = 16,
+      height = 20
+    )
+  }
+}
+
+
+```
+
+
+```{r}
+library(DElegate)
+library(org.Mm.eg.db)
+library(clusterProfiler)
+library(ggVennDiagram)
+library(ggplot2)
+library(dplyr)
+
+# Define comparisons against Unwounded
+comparisons <- list(
+  "D1PW"  = c("Wounded_D1PW", "Unwounded"),
+  "D2PW"  = c("Wounded_D2PW", "Unwounded"),
+  "D4PW"  = c("Wounded_D4PW", "Unwounded"),
+  "D7PW"  = c("Wounded_D7PW", "Unwounded"),
+  "D15PW" = c("Wounded_D15PW", "Unwounded"),
+  "D30PW" = c("Wounded_D30PW", "Unwounded")
+)
+
+# Initialize list to store upregulated gene sets
+upregulated_genes_list <- list()
+
+
+options(future.globals.maxSize = 8000 * 1024^2)
+
+# Loop through comparisons and perform DE
+for (tp in names(comparisons)) {
+  comp <- comparisons[[tp]]
+  message("Processing comparison: ", tp)
+
+  # Try DE analysis
+  de_result <- tryCatch({
+    DElegate::findDE(
+      object = alldata,
+      compare = comp,
+      method = "deseq",
+      group_column = "timepoint"
+    )
+  }, error = function(e) {
+    warning("Skipping ", tp, ": ", e$message)
+    return(NULL)
+  })
+
+  if (!is.null(de_result)) {
+    # Filter for upregulated genes
+    up_df <- subset(de_result, log_fc > 0 & pvalue < 0.01)
+    if (nrow(up_df) > 0) {
+      upregulated_genes_list[[tp]] <- up_df$feature
+    } else {
+      upregulated_genes_list[[tp]] <- character(0)
+    }
+  }
+}
+
+# Optional: Save the upregulated gene lists
+for (tp in names(upregulated_genes_list)) {
+  write.csv(upregulated_genes_list[[tp]],
+            file = paste0("UpregulatedGenes_", tp, "_vs_UW.csv"),
+            row.names = FALSE)
+}
+
+# Plot Venn diagram
+# Filter to timepoints with non-empty gene sets
+filtered_upsets <- upregulated_genes_list[sapply(upregulated_genes_list, length) > 0]
+
+
+# Chronological order
+ordered_timepoints <- c("D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW")
+
+# Reorder filtered_upsets to match
+filtered_upsets <- filtered_upsets[ordered_timepoints]
+
+library(ggVennDiagram)
+library(ggplot2)
+
+venn_plot_bold_labels <- ggVennDiagram(
+  filtered_upsets,
+  label = "count",
+  category.names = names(filtered_upsets),
+  category.col = "black",          # label color
+  category_fontface = "bold",      # make set labels bold
+  label_geom = "text",
+  label_alpha = 1,
+  label_size = 5,
+  label_color = "black",
+  label_fontface = "bold"
+) +
+  scale_fill_gradient(low = "#D0F0C0", high = "#006400") +
+  theme(
+    text = element_text(size = 14),
+    legend.position = "none"
+  )
+
+ggsave(
+  filename = "6_SetVennDiagram_green.svg",  # name of the file
+  plot = venn_plot_bold_labels,
+  width = 10,     # width in inches
+  height = 8,     # height in inches
+  dpi = 300       # resolution
+)
+
+
+# Create a new list where D1PW and D2PW are merged
+filtered_upsets_grouped <- filtered_upsets
+
+# Merge the two sets
+filtered_upsets_grouped$Inflammation <- unique(c(
+  filtered_upsets$D1PW,
+  filtered_upsets$D2PW
+))
+
+# Remove the original D1PW and D2PW entries
+filtered_upsets_grouped <- filtered_upsets_grouped[!names(filtered_upsets_grouped) %in% c("D1PW", "D2PW")]
+
+# Optional: reorder timepoints if you like
+filtered_upsets_grouped <- filtered_upsets_grouped[c("Inflammation", "D4PW", "D7PW", "D15PW", "D30PW")]
+
+# Plot
+venn_plot_grouped <- ggVennDiagram(
+  filtered_upsets_grouped,
+  label = "count",
+  category.names = names(filtered_upsets_grouped),
+  category.col = "black",
+  category_fontface = "bold",
+  label_geom = "text",
+  label_alpha = 1,
+  label_size = 5,
+  label_color = "black",
+  label_fontface = "bold"
+) +
+  scale_fill_gradient(low = "#D0F0C0", high = "#006400") +
+  theme(
+    text = element_text(size = 14),
+    legend.position = "none"
+  )
+
+# Save the plot
+ggsave("6set_VennDiagram_green_grouped_inflammation.svg", plot = venn_plot_grouped, width = 10, height = 8, dpi = 300)
+
+
+
+```
+
+
+
+
+
+
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+
+Idents(alldata) <- alldata$orig.ident
+alldata = subset(alldata, ident = c("UW_snRNAseq_2","D4PW_snRNAseq_1","D4PW_snRNAseq_2"), invert = T)
+
+  # Perform DE analysis for different comparisons
+  de_results.04 <- DElegate::findDE(
+    object = alldata, 
+    compare = c("Wounded_D4PW", "Unwounded"),
+    method = "deseq",
+    group_column = "timepoint",
+    replicate_column = "orig.ident"
+  )
+  de_results.47 <- DElegate::findDE(
+    object = alldata, 
+    compare = c("Wounded_D7PW", "Unwounded"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  de_results.715 <- DElegate::findDE(
+    object = alldata, 
+    compare = c("Wounded_D15PW", "Unwounded"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  de_results.1530 <- DElegate::findDE(
+    object = alldata, 
+    compare = c("Wounded_D30PW", "Unwounded"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  
+   # Set filtering thresholds
+  x <- 1
+  y <- 0.01
+  
+  # Subset DE results based on thresholds
+  res.04 <- subset(de_results.04, padj < y & log_fc > x)
+  res.47 <- subset(de_results.47, padj < y & log_fc > x)
+  res.715 <- subset(de_results.715, padj < y & log_fc > x)
+  res.1530 <- subset(de_results.1530, padj < y & log_fc > x)
+  
+  # Convert SYMBOL to ENTREZID
+  ids.04 <- bitr(res.04$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.47 <- bitr(res.47$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.715 <- bitr(res.715$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.1530 <- bitr(res.1530$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  
+  # Create a gene list
+  genelist <- list(
+    UWOvsD4PW = ids.04$ENTREZID,
+    UWOvsD7PW = ids.47$ENTREZID,
+    UWOvsD15PW = ids.715$ENTREZID,
+    UWOvsD30PW = ids.1530$ENTREZID
+  )
+  
+  # Run ClusterProfiler
+  ck <- compareCluster(geneCluster = genelist, fun = enrichGO, OrgDb = org.Mm.eg.db, 
+                       pvalueCutoff = 0.05, ont = "BP")
+  ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
+  
+  # Plot dotplot
+  s1 <- dotplot(ck, showCategory = 5, font.size = 12, label_format = 100) + 
+    theme(plot.margin = grid::unit(c(0, 0, 0, 0), "mm"))
+  s2 <- s1 + 
+    theme(axis.text.x = element_text(size = 12, face = "bold", color = "black", angle = 45)) + 
+    theme(axis.text.y = element_text(size = 12, face = "bold", color = "black"))
+  print(s2)
+  
+  # Save plot
+  ggsave(paste0("GO_", gsub(" ", "_", "Global"), ".png"), width = 10, height = 5)
+  
+  # Save cluster summary to a CSV file
+  cluster_summary <- data.frame(ck)
+  write.csv(cluster_summary, file = paste0("GO_", gsub(" ", "_", "Global"), ".csv"), row.names = FALSE)
+  
+  
+# Filter based on thresholds
+res.04 <- subset(de_results.04, padj < y & log_fc > x)
+res.47 <- subset(de_results.47, padj < y & log_fc > x)
+res.715 <- subset(de_results.715, padj < y & log_fc > x)
+res.1530 <- subset(de_results.1530, padj < y & log_fc > x)
+
+# Sort by padj (ascending), then log_fc (descending), then rate1 (descending)
+res.04 <- res.04[order(res.04$padj, -res.04$log_fc, -res.04$rate1), ]
+res.47 <- res.47[order(res.47$padj, -res.47$log_fc, -res.47$rate1), ]
+res.715 <- res.715[order(res.715$padj, -res.715$log_fc, -res.715$rate1), ]
+res.1530 <- res.1530[order(res.1530$padj, -res.1530$log_fc, -res.1530$rate1), ]
+
+# Extract top 200 genes from each
+top.04 <- head(res.04$feature, 50)
+top.47 <- head(res.47$feature, 50)
+top.715 <- head(res.715$feature, 50)
+top.1530 <- head(res.1530$feature, 50)
+
+# Combine and get unique genes
+all_genes <- c(top.04, top.47, top.715, top.1530)
+unique_genes <- unique(all_genes)
+
+# Assuming your metadata columns are named "timepoint" and "modality"
+alldata$timepoint_modality <- paste(alldata$timepoint, alldata$modality, sep = "_")
+new_levels <- c(
+  # Unwounded
+  "Unwounded_scRNAseq",
+  "Unwounded_snRNAseq",
+  "Unwounded_CITEseq",
+  
+  # Wounded_D1PW
+  "Wounded_D1PW_scRNAseq",
+  
+  # Wounded_D2PW
+  "Wounded_D2PW_scRNAseq",
+  
+  # Wounded_D4PW
+  "Wounded_D4PW_scRNAseq",
+  "Wounded_D4PW_snRNAseq",
+  
+  # Wounded_D7PW
+  "Wounded_D7PW_scRNAseq",
+  "Wounded_D7PW_snRNAseq",
+  
+  # Wounded_D15PW
+  "Wounded_D15PW_snRNAseq",
+  "Wounded_D15PW_CITEseq",
+  
+  # Wounded_D30PW
+  "Wounded_D30PW_snRNAseq",
+  "Wounded_D30PW_CITEseq"
+)
+
+alldata$timepoint_modality <- factor(alldata$timepoint_modality, levels = new_levels)
+
+
+Idents(alldata) <- alldata$timepoint_modality
+
+p <- DotPlot(alldata, unique_genes, dot.scale = 7, cols =  "RdYlBu") +RotatedAxis() +
+theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") # Outlines circles in black
+# Display the plot
+
+ggsave(filename = "MajorExpressionForEachTimepointModality_RatioOvertimeVer3.png", width = 40, height = 4)
+```
+
+
+
+
+
+
+```{r}
+library(dplyr)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(ggplot2)
+
+library(dplyr)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(ggplot2)
+
+# Define cell types to iterate through
+cell_types <- c(
+  "IFE Keratinocytes", "HF Keratinocytes", "Sebocytes", "Fibroblasts", 
+  "Immune", "Endothelial", "Pericytes", "Muscle", 
+  "Melanocytes", "Schwann cells", "Adipocytes", "RBCs"
+)
+
+# Make sure identity column is consistent
+alldata$celltype <- Idents(alldata)
+
+# Loop through each cell type
+for (celltype in cell_types) {
+  message("Processing cell type: ", celltype)
+
+  # Subset Seurat object to just this cell type
+  alldata_subset <- subset(alldata, celltype == celltype)
+
+  # Set timepoint as the identity for DE analysis
+  Idents(alldata_subset) <- alldata_subset$timepoint
+
+  # Run differential expression comparing timepoints within the cell type
+  cellmarkers_bulk <- findDE(
+    alldata_subset, 
+    group_column = "timepoint",
+    replicate_column = "orig.ident",
+    method = "deseq", 
+    lfc_shrinkage = "apeglm"
+  )
+
+  # Sort by log fold change
+  cellmarkers_bulk <- cellmarkers_bulk %>%
+    group_by(group1) %>%
+    arrange(desc(log_fc)) %>%
+    ungroup()
+
+  # GO enrichment analysis on DE genes
+  gse_bulk <- compareCluster(
+    feature | log_fc ~ group1, 
+    data = cellmarkers_bulk, 
+    fun = gseGO, 
+    OrgDb = org.Mm.eg.db,
+    keyType = "SYMBOL", 
+    pvalueCutoff = 0.05, 
+    pAdjustMethod = "BH", 
+    ont = "BP", 
+    nPermSimple = 10000, 
+    eps = 0
+  )
+
+  # Plotting GO enrichment
+  s1 <- dotplot(gse_bulk, showCategory = 3, font.size = 8, label_format = 100) +
+    theme(plot.margin = grid::unit(c(0, 0, 0, 0), "mm"))
+
+  s2 <- s1 +
+    theme(
+      axis.text.y = element_text(size = 11, face = "bold", color = "black"),
+      axis.text.x = element_text(size = 11, face = "bold", color = "black", angle = 45)
+    )
+
+  # Save dotplot
+  plot_filename <- paste0("DotPlot_", gsub(" ", "_", celltype), "_Timepoint.tiff")
+  ggsave(plot_filename, s2, height = 8, width = 10)
+
+  # Save GO enrichment summary
+  cluster_summary <- data.frame(gse_bulk)
+  csv_filename <- paste0("GO_", gsub(" ", "_", celltype), "_Timepoint.csv")
+  write.csv(cluster_summary, file = csv_filename, row.names = FALSE)
+
+  # Save raw DE results (optional, but helpful!)
+  de_filename <- paste0("DEG_", gsub(" ", "_", celltype), "_Timepoint.csv")
+  write.csv(cellmarkers_bulk, file = de_filename, row.names = FALSE)
+}
+
+```
+
+
+
+
+
+
+Figure 1
+
+```{r}
+
+Idents(alldata) <- "metaclusters"
+features = c("Krt14","Itga6", #Keratincoytes Labels
+             "Krt15","Sox9",
+             "Pparg", #Sebocytes
+             "Col1a2","Pdgfra", #Fibroblast Markers
+             "Ptprc", # Immune Cell Markers
+             "Pecam1", #Endothelial Cell Markers
+                          "Rgs5", #Pericytes
+             "Mylpf", "Des", # Muscle Markers
+                          "Mpz", #Schwann Cell Markers
+             "Mlana", #Melanocyte Marker
+             "Adipoq", #Adipocyte Markers
+             "Hba-a1","Hbb-bt" #RBC marker
+)
+
+
+
+DotPlot(alldata, features, dot.scale = 7) + RotatedAxis()
+
+
+
+p <- DotPlot(alldata, features, dot.scale = 7, cols = c("white", "blue3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") # Outlines circles in black
+
+# Display the plot
+p
+
+ggsave("DotPlotAllModalityIntergrationAcrossCellTypes.tiff",dpi = 300,height = 6, width =7.3 )
+
+```
+
+```{r}
+process_go_and_plot <- function(celltype, color, csv_path) {
+  # Load GO result
+  onto.genes <- read.csv(csv_path)
+  
+  # Rebuild and simplify
+  ck_rebuilt <- new("compareClusterResult", compareClusterResult = onto.genes, fun = "enrichGO")
+  ck_rebuilt <- simplify(ck_rebuilt)
+  ck_df <- as.data.frame(ck_rebuilt)
+  
+  # Select unique pathways
+  unique_pathways <- ck_df %>%
+    arrange(p.adjust) %>%
+    distinct(Description, .keep_all = TRUE)
+  
+  # Select top N per cluster
+  top_n <- 2
+  top_pathways <- unique_pathways %>%
+    group_by(Cluster) %>%
+    arrange(p.adjust) %>%
+    slice_head(n = top_n) %>%
+    ungroup()
+  
+  # Split gene list
+  genes_by_pathway <- top_pathways %>%
+    select(Cluster, Description, geneID) %>%
+    separate_rows(geneID, sep = "/")
+  
+  genes_listed <- genes_by_pathway %>%
+    group_by(Cluster, Description) %>%
+    summarise(Genes = list(unique(geneID)), .groups = "drop")
+  
+  # Order clusters
+  cluster_order <- c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")
+  genes_listed <- genes_listed %>%
+    mutate(Cluster = factor(Cluster, levels = cluster_order)) %>%
+    arrange(Cluster)
+  
+  # Top 5 genes
+  pick_top5 <- function(genes_vector) genes_vector[1:min(length(genes_vector), 5)]
+  top5_genes_per_pathway <- genes_listed %>%
+    rowwise() %>%
+    mutate(Top5Genes = list(pick_top5(Genes))) %>%
+    ungroup()
+  
+  unique_top5_genes <- top5_genes_per_pathway %>%
+    pull(Top5Genes) %>%
+    unlist() %>%
+    unique() %>%
+    as.character()
+  
+  # Subset Seurat and plot
+  Idents(alldata) <- "metaclusters"
+  alldata.1 <- subset(alldata, ident = celltype)
+  Idents(alldata.1) <- "timepoint"
+  
+  p <- DotPlot(alldata.1, unique_top5_genes, dot.scale = 7, cols = c("white", color)) +
+    RotatedAxis() +
+    theme(text = element_text(size = 15, face = "bold", family = "Arial")) +
+    scale_size(range = c(0, 7)) +
+    geom_point(aes(size = pct.exp), shape = 21, color = "black")
+  
+  # Save plots
+  ggsave(paste0("DotPlot", celltype, "GO.png"), dpi = 300, height = 3.5, width = 8)
+  ggsave(paste0("DotPlot", celltype, "GOUnsupervisedList.png"), dpi = 300, height = 4.5, width = 14)
+  
+  # Save table
+  top5_genes_per_pathway_flat <- top5_genes_per_pathway %>%
+    mutate(
+      Cluster = as.character(Cluster),
+      Description = as.character(Description),
+      Genes = sapply(Genes, function(x) paste(x, collapse = "; ")),
+      Top5Genes = sapply(Top5Genes, function(x) paste(x, collapse = "; "))
+    ) %>%
+    as.data.frame()
+  
+  write.csv(top5_genes_per_pathway_flat, file = paste0(celltype, "_genes_per_pathway.csv"), row.names = FALSE)
+}
+
+```
+
+
+
+
+
+
+```{r}
+
+onto.genes = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Adipocytes.csv")
+ck_rebuilt <- new(
+  "compareClusterResult",
+  compareClusterResult = onto.genes,
+  fun = "enrichGO"
+)
+
+# Step 3: Now you can use simplify() and other clusterProfiler functions
+ck_rebuilt<- simplify(ck_rebuilt)
+
+# 1. Extract data.frame from the compareClusterResult object
+ck_df <- as.data.frame(ck_rebuilt)
+
+# 2. Ensure each pathway (Description) is unique across ALL clusters
+# Keep only the first appearance (lowest p.adjust)
+unique_pathways <- ck_df %>%
+  arrange(p.adjust) %>%
+  distinct(Description, .keep_all = TRUE)
+
+# 3. Then for each cluster, pick top N pathways (among unique ones)
+top_n <- 2# change if you want more/fewer per cluster
+
+top_pathways <- unique_pathways %>%
+  group_by(Cluster) %>%
+  arrange(p.adjust) %>%
+  slice_head(n = top_n) %>%
+  ungroup()
+
+# 4. Extract the gene lists
+genes_by_pathway <- top_pathways %>%
+  select(Cluster, Description, geneID) %>%
+  separate_rows(geneID, sep = "/")  # split multiple gene IDs into rows
+
+# 5. Summarize nicely
+genes_listed <- genes_by_pathway %>%
+  group_by(Cluster, Description) %>%
+  summarise(Genes = list(unique(geneID)), .groups = "drop")
+
+# 1. Define your custom cluster order
+cluster_order <- c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")
+
+# 2. Set 'Cluster' as a factor with the desired order
+genes_listed <- genes_listed %>%
+  mutate(Cluster = factor(Cluster, levels = cluster_order)) %>%
+  arrange(Cluster)
+
+# Function to pick top 5 genes from each pathway
+pick_top5 <- function(genes_vector) {
+  genes_vector[1:min(length(genes_vector), 5)]  # No sorting, just first 5
+}
+
+# Apply to each pathway
+top5_genes_per_pathway <- genes_listed %>%
+  rowwise() %>%
+  mutate(Top5Genes = list(pick_top5(Genes))) %>%
+  ungroup()
+
+# 3. Flatten to get all genes, make them unique
+unique_top5_genes <- top5_genes_per_pathway %>%
+  pull(Top5Genes) %>%
+  unlist() %>%
+  unique() %>%
+  as.character()
+
+
+Idents(alldata) <- "metaclusters"
+alldata.1 <- subset(alldata, ident = "Adipocytes")  
+
+
+#DotPlots for Gene Ontology Cell Types
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl5","Cxcr2","Acp5","Il23a", #D4PW Leukocote Recruitment, Tissue Remodeling
+             "Pparg","Gpc6","Ctnna3") #D7PW Proliferation
+             
+genes_to_remove <- c("Krt77", "Krt10","Krt5", "Krt1")
+
+unique_top5_genes <- unique_top5_genes[!unique_top5_genes %in% genes_to_remove]
+
+p <- DotPlot(alldata.1, unique_top5_genes, dot.scale = 7, cols = c("white", "springgreen4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotImmuneCellsGOEnhanced.png",dpi = 300,height = 4.5, width = 7 )
+
+ggsave("DotPlotImmuneCellsGOUnsuprisedList.png",dpi = 300,height = 4.5, width = 14 )
+
+
+# Now you can save it
+# Force everything to be character/text (no lists allowed)
+top5_genes_per_pathway_flat <- top5_genes_per_pathway %>%
+  mutate(
+    Cluster = as.character(Cluster),
+    Description = as.character(Description),
+    Genes = sapply(Genes, function(x) paste(x, collapse = "; ")),
+    Top5Genes = sapply(Top5Genes, function(x) paste(x, collapse = "; "))
+  ) %>%
+  as.data.frame()
+
+# Now save it
+write.csv(top5_genes_per_pathway_flat, file = "ImmuneCells_genes_per_pathway.csv", row.names = FALSE)
+
+
+```
+
+Gene Ontology Dot Plots for Immune Cells
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+  
+alldata.1 <- subset(alldata, ident = "Immune cells")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl5","Cxcr2","Acp5","Il23a", #D4PW Leukocote Recruitment, Tissue Remodeling
+             "Pparg","Gpc6","Ctnna3") #D7PW Proliferation
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "springgreen4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotImmuneCellsGO2.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+Gene Ontology Dot Plots For Fibroblasts
+
+```{r}
+onto.genes = read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Fibroblasts.csv")
+ck_rebuilt <- new(
+  "compareClusterResult",
+  compareClusterResult = onto.genes,
+  fun = "enrichGO"
+)
+
+# Step 3: Now you can use simplify() and other clusterProfiler functions
+ck_rebuilt<- simplify(ck_rebuilt)
+
+# 1. Extract data.frame from the compareClusterResult object
+ck_df <- as.data.frame(ck_rebuilt)
+
+# 2. Ensure each pathway (Description) is unique across ALL clusters
+# Keep only the first appearance (lowest p.adjust)
+unique_pathways <- ck_df %>%
+  arrange(p.adjust) %>%
+  distinct(Description, .keep_all = TRUE)
+
+# 3. Then for each cluster, pick top N pathways (among unique ones)
+top_n <- 2# change if you want more/fewer per cluster
+
+top_pathways <- unique_pathways %>%
+  group_by(Cluster) %>%
+  arrange(p.adjust) %>%
+  slice_head(n = top_n) %>%
+  ungroup()
+
+# 4. Extract the gene lists
+genes_by_pathway <- top_pathways %>%
+  select(Cluster, Description, geneID) %>%
+  separate_rows(geneID, sep = "/")  # split multiple gene IDs into rows
+
+# 5. Summarize nicely
+genes_listed <- genes_by_pathway %>%
+  group_by(Cluster, Description) %>%
+  summarise(Genes = list(unique(geneID)), .groups = "drop")
+
+# 1. Define your custom cluster order
+cluster_order <- c("UWOvsD4PW", "D4PWvsD7PW", "D7PWvsD15PW", "D15PWvsD30PW")
+
+# 2. Set 'Cluster' as a factor with the desired order
+genes_listed <- genes_listed %>%
+  mutate(Cluster = factor(Cluster, levels = cluster_order)) %>%
+  arrange(Cluster)
+
+# Function to pick top 5 genes from each pathway
+pick_top5 <- function(genes_vector) {
+  genes_vector[1:min(length(genes_vector), 5)]  # No sorting, just first 5
+}
+
+# Apply to each pathway
+top5_genes_per_pathway <- genes_listed %>%
+  rowwise() %>%
+  mutate(Top5Genes = list(pick_top5(Genes))) %>%
+  ungroup()
+
+# 3. Flatten to get all genes, make them unique
+unique_top5_genes <- top5_genes_per_pathway %>%
+  pull(Top5Genes) %>%
+  unlist() %>%
+  unique() %>%
+  as.character()
+
+
+
+#DotPlots for Gene Ontology Cell Types
+
+
+Idents(alldata) <- "metaclusters"
+  
+alldata.1 <- subset(alldata, ident = "Fibroblasts")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("S100a8","S100a9","Ccl22","Cxcl12", #D4PW Leukocote Recruitment, Tissue Remodeling
+                          "Acta2","Nox4", #Contraction
+             "Egfr","Esr1","Pdgfd","Fgf2","Pak3", #D7PW Fibroblast Profliferation/Migration
+             "Wnt10b","Msx2" #Anagen
+                 ) 
+             
+
+
+p <- DotPlot(alldata.1, unique_top5_genes, dot.scale = 7, cols = c("white", "red3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotFibroblastsGO.png",dpi = 300,height = 3.5, width = 8 )
+
+ggsave("DotPlotFibroblastsGOUnsupervisedList.png",dpi = 300,height = 4.5, width = 14 )
+
+
+# Now you can save it
+# Force everything to be character/text (no lists allowed)
+top5_genes_per_pathway_flat <- top5_genes_per_pathway %>%
+  mutate(
+    Cluster = as.character(Cluster),
+    Description = as.character(Description),
+    Genes = sapply(Genes, function(x) paste(x, collapse = "; ")),
+    Top5Genes = sapply(Top5Genes, function(x) paste(x, collapse = "; "))
+  ) %>%
+  as.data.frame()
+
+# Now save it
+write.csv(top5_genes_per_pathway_flat, file = "Fibroblasts_genes_per_pathway.csv", row.names = FALSE)
+
+```
+
+Gene Ontology Dot Plots for IFE
+
+```{r}
+
+process_go_and_plot("IFE Keratinocytes","royalblue4","/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_IFE.csv")
+#DotPlots for Gene Ontology Cell Types
+
+alldata.1 <- subset(alldata, ident = "IFE")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl3","Il1b",
+             "Ubb","Sfn",#Cell Inflamation
+             "Egfr","Notch2","Bmpr1a","Fgfr2",
+             
+             "Mki67", "Barx2","Dlx2",
+             "Myc")
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "royalblue4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotIFEGO.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+Gene Ontology Dot Plots for HF
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+process_go_and_plot("HF Keratinocytes","skyblue4","/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_HF.csv")
+
+
+alldata.1 <- subset(alldata, ident = "HF")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl3","Fcgr2b", "Cxcl14","Ubc", #Inflammation
+             "Ext1","Lrig1", "Lgals1","Atf2", #Axonogensis/Muscle
+             "Krt27","Dlx3","Smad3", #Hair Follicle
+             "Sox9"
+             
+        )
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "skyblue4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotHFGO.tiff",dpi = 300,height = 3.5, width = 8 )
+
+```
+
+Gene Ontology Dot Plots for Sebocytes
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+process_go_and_plot("Sebocytes","turquoise4","/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Sebocytes.csv")
+
+alldata.1 <- subset(alldata, ident = "Sebocytes")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cxcl2","Ccl4","Tagln2","S100a11", #Inflammation
+             "Cdk14","Tanc2a", "Efna5", #Hair Follicle
+             "Lef1","Sox5", "Mef2c", "Esr1","Bmpr2"
+        )
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "turquoise4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotSebocytesGO.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+Gene Ontology Dot Plots for Schwann Cells
+
+```{r}
+#DotPlots for Gene Ontology Cell Types
+
+process_go_and_plot("Schwann cells","darkseagreen3","/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Schwann_cells.csv")
+
+alldata.1 <- subset(alldata, ident = "Schwann cells")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Cttn","Cfl1","Tubb2b", #modification of postsynaptic structure
+             "Ptprg","Nf1","Ptprz1","Magi2", #Hair Follicle
+             "Chl1","Hmox1"
+        )
+             
+
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "darkseagreen3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotSchwannCells.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+
+
+```{r Gene Ontology Dot Plots for Skeletal Muscle}
+#DotPlots for Gene Ontology Cell Types
+
+process_go_and_plot("Muscle","orange3","/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Muscle_cells.csv")
+
+alldata.1 <- subset(alldata, ident = "Muscle cells")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("S100a9","Il1b","Ccl3", #modification of postsynaptic structure
+             "Ttn","Mlip3","Mef2c","Sox6", #Hair Follicle
+             "Smad4","Lef1","Notch1", "Dab2"
+        )
+             
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "orange3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotSkeletalMuscle.tiff",dpi = 300,height = 3.5, width = 8 )
+
+```
+
+
+
+```{r Gene Ontology Dot Plots for Endothelial}
+#DotPlots for Gene Ontology Cell Types
+process_go_and_plot("Endothelial","gold3","/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Endothelial_cells.csv")
+
+
+alldata.1 <- subset(alldata, ident = "Endothelial")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Serpine1","Spp1","Ccl3","Thbs1","Egr1", #modification of postsynaptic structure
+             "Ptprm","Cdh13","Vegfc", #Hair Follicle
+             "Bmpr1a","Dlx3","Cdh3", "Lncpint")
+             
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "gold3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotEndothelial.tiff",dpi = 300,height = 3.5, width = 8 )
+
+```
+
+Gene Ontology for Pericytes
+
+```{r Gene Ontology Dot Plots for Pericytes}
+#DotPlots for Gene Ontology Cell Types
+process_go_and_plot("Pericytes","mediumpurple4","/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Pericytes.csv")
+
+
+alldata.1 <- subset(alldata, ident = "Pericytes")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Serpine1","Spp1","Ccl3","Thbs1","Egr1", #modification of postsynaptic structure
+             "Ptprm","Cdh13","Vegfc", #Hair Follicle
+             "Bmpr1a","Dlx3","Cdh3", "Lncpint")
+             
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "mediumpurple")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotPericytes.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+```{r Gene Ontology for Melanocytes}
+#DotPlots for Gene Ontology Cell Types
+process_go_and_plot("Melanocytes","orchid3","/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Melanocytes.csv")
+
+
+alldata.1 <- subset(alldata, ident = "Melanocytes")  
+Idents(alldata.1) <- "timepoint"
+
+
+features = c("Serpine1","Spp1","Ccl3","Thbs1","Egr1", #modification of postsynaptic structure
+             "Ptprm","Cdh13","Vegfc", #Hair Follicle
+             "Bmpr1a","Dlx3","Cdh3", "Lncpint")
+             
+
+p <- DotPlot(alldata.1, features, dot.scale = 7, cols = c("white", "orchid3")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotMleanocytes.tiff",dpi = 300,height = 3.5, width = 8 )
+```
+
+```{r Gene Ontology for Adipocytes}
+#DotPlots for Gene Ontology Cell Types
+
+process_go_and_plot("Adipocytes","olivedrab3","/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Gene Ontology/csv files/GO_Adipocytes.csv")
+
+
+alldata.1 <- subset(alldata, ident = "Adipocytes")  
+Idents(alldata.1) <- "timepoint"
+
+
+p <- DotPlot(alldata.1, unique_top5_genes, dot.scale = 7, cols = c("white", "olivedrab4")) + 
+  RotatedAxis() +
+  theme(
+    text = element_text(size = 15, face = "bold", family = "Arial")
+  ) +
+  scale_size(range = c(0, 7)) + # Ensures size consistency
+  geom_point(aes(size = pct.exp), shape = 21, color = "black") 
+# Outlines circles in black
+p
+# Display the plot
+ggsave("DotPlotAdipocytesGOEnhanced.png",dpi = 300,height = 4.5, width = 7 )
+
+ggsave("DotPlotAdipocytesGOUnsuprisedList.png",dpi = 300,height = 4.5, width = 14 )
+
+
+# Now you can save it
+# Force everything to be character/text (no lists allowed)
+top5_genes_per_pathway_flat <- top5_genes_per_pathway %>%
+  mutate(
+    Cluster = as.character(Cluster),
+    Description = as.character(Description),
+    Genes = sapply(Genes, function(x) paste(x, collapse = "; ")),
+    Top5Genes = sapply(Top5Genes, function(x) paste(x, collapse = "; "))
+  ) %>%
+  as.data.frame()
+
+# Now save it
+write.csv(top5_genes_per_pathway_flat, file = "Adipocytes_genes_per_pathway.csv", row.names = FALSE)
+
+```
+Run Cell Chat on the Global Cell Types
+
+```{r}
+##Prep the cellchat database
+CellChatDB <- CellChatDB.mouse
+
+showDatabaseCategory(CellChatDB)
+#This removes non-protein interactions that are contained in the CellChat DB such as synaptic interactions and metabolic signals
+CellChatDB.use <- subsetDB(CellChatDB)
+
+```
+
+```{r}
+#Hold off Until RoadMap
+cellchat <- createCellChat(object = alldata.1, group.by = "celltype", assay = "RNA")
+levels(cellchat@idents)
+cellchat <- subsetData(cellchat) # This step is necessary even if using the whole database
+future::plan("multisession", workers = 4) # do parallel
+cellchat <- identifyOverExpressedGenes(cellchat)
+cellchat <- identifyOverExpressedInteractions(cellchat)
+
+```
+
+
+LGALS Comparing Unwounded vs Wounded Global Expression
+```{r}
+#LGALS GLOBAL Expression Plots
+View(alldata@meta.data)
+
+# Create a new metadata column "Wound_Status"
+alldata$Wound_Status <- ifelse(alldata$timepoint == "Unwounded", "Unwounded", "Wounded")
+
+# Check if the new column is added correctly
+table(alldata$Wound_Status)
+
+
+FeaturePlot_scCustom(alldata, "Lgals1", split.by = "Wound_Status", reduction = "umap.rpca", na_cutoff = 1)
+
+ggsave("FeauturePlotLGAS1ExpressionUWOvsWOGlobal.png", width = 9, height = 5)
+
+p = VlnPlot_scCustom(alldata, "Lgals1", split.by = "Wound_Status", pt.size = 0, assay = "RNA", colors_use = c("cornflowerblue","red"))
+p <- p & theme(
+  text = element_text(family = "Arial", face = "bold", size = 11),
+  axis.text = element_text(family = "Arial", face = "bold", size = 11),
+  axis.title = element_text(family = "Arial", face = "bold", size = 11),
+  legend.text = element_text(family = "Arial", face = "bold", size = 11),
+  legend.title = element_text(family = "Arial", face = "bold", size = 11)
+)
+
+# Display the plot
+p
+
+ggsave("VlnPlotLGAS1ExpressionUWOvsWOGlobal.png", width = 9, height = 5)
+
+
+#PSU LGALS1 EXPRESSION PLOTS
+alldata = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 1-2/PSUUnit.rds")
+
+
+# Create a new metadata column "Wound_Status"
+alldata$Wound_Status <- ifelse(alldata$timepoint == "Unwounded", "Unwounded", "Wounded")
+
+# Check if the new column is   correctly
+table(alldata$Wound_Status)
+
+
+FeaturePlot_scCustom(alldata, "Lgals1", split.by = "Wound_Status", reduction = "umap.harmony", na_cutoff = 0.1)
+
+ggsave("FeauturePlotLGAS1ExpressionUWOvsWOPSU.png", width = 9, height = 5)
+
+p = VlnPlot_scCustom(alldata, "Lgals1", split.by = "Wound_Status", pt.size = 0, assay = "RNA", colors_use = c("cornflowerblue","red"))
+p <- p & theme(
+  text = element_text(family = "Arial", face = "bold", size = 11),
+  axis.text = element_text(family = "Arial", face = "bold", size = 11),
+  axis.title = element_text(family = "Arial", face = "bold", size = 11),
+  legend.text = element_text(family = "Arial", face = "bold", size = 11),
+  legend.title = element_text(family = "Arial", face = "bold", size = 11)
+)
+
+# Display the plot
+p
+
+ggsave("VlnPlotLGAS1ExpressionUWOvsWOPSU.png", width = 9, height = 5)
+```
+
+
+```{r Find Markers Heatmap}
+
+alldata = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Sequencing Repository/Data/OWHA RDS files/IntegratedMultimodal_FineCellTypes_061225.rds")
+# Load libraries
+library(Seurat)
+library(clusterProfiler)
+library(org.Mm.eg.db)  # ⬅️ Mouse annotation database
+library(ComplexHeatmap)
+library(circlize)
+library(dplyr)
+library(khroma)
+
+# Set identity and assay
+Idents(alldata) <- "timepoint"
+DefaultAssay(alldata) <- "RNA"
+alldata<- JoinLayers(alldata)
+
+# Recode and factor timepoints
+alldata@meta.data$timepoint <- recode(alldata@meta.data$timepoint,
+  "Unwounded" = "UW",
+  "Wounded_D1PW" = "D1PW",
+  "Wounded_D2PW" = "D2PW",
+  "Wounded_D4PW" = "D4PW",
+  "Wounded_D7PW" = "D7PW",
+  "Wounded_D15PW" = "D15PW",
+  "Wounded_D30PW" = "D30PW"
+)
+alldata@meta.data$timepoint <- factor(alldata@meta.data$timepoint,
+  levels = c("UW", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW"))
+
+# Find markers
+cellmarkers_mouse <- FindAllMarkers(alldata, min.pct = 0.30, recorrect_umi = FALSE, only.pos = TRUE)
+
+# Subset DE genes per timepoint
+timepoints <- levels(alldata@meta.data$timepoint)
+de_genes_list <- lapply(timepoints, function(tp) {
+  subset(cellmarkers_mouse, cluster == tp & avg_log2FC > 1)
+})
+names(de_genes_list) <- timepoints
+
+# Convert to ENTREZ (mouse)
+gene_lists_entrez <- lapply(de_genes_list, function(df) {
+  bitr(df$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)$ENTREZID
+})
+
+# GO enrichment
+ck <- compareCluster(geneCluster = gene_lists_entrez, fun = enrichGO, OrgDb = org.Mm.eg.db,
+                     pvalueCutoff = 0.05, ont = "BP")
+ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
+ck <- simplify(ck)
+
+# Unique pathways
+ck_df <- as.data.frame(ck)
+unique_df <- ck_df %>% group_by(ID) %>% filter(n_distinct(Cluster) == 1) %>% ungroup()
+ck@compareClusterResult <- unique_df
+
+
+# Dotplot
+s1 <- dotplot(ck, showCategory = 8, font.size = 12, label_format = 100) +
+  scale_color_gradientn(colors = c("blue", "white", "red")) +
+  theme(plot.margin = grid::unit(c(0, 0, 0, 0), "mm")) +
+  theme(axis.text.x = element_text(size = 12, face = "bold", color = "black", angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 12, face = "bold", color = "black"))
+
+s1 + customtheme
+ggsave("Mouse_GeneOntology_GlobalPathways_AllTimepoints.png", width = 10, height = 7)
+
+# Save GO results
+write.csv(as.data.frame(ck), file = "Mouse_GlobalGOcompareCluster_results.csv", row.names = FALSE)
+ck <- read.csv("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 2/Mouse_GlobalGOcompareCluster_results.csv")
+
+library(ggplot2)
+library(dplyr)
+library(khroma)
+
+# ---- Define Nightfall colors for timepoints ----
+timepoint_colors <- color("nightfall")(7)
+names(timepoint_colors) <- c("UW", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW")
+
+# ---- Ensure Cluster is a factor in correct order ----
+timepoint_order <- c("UW", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW")
+ck_df$Cluster <- factor(ck_df$Cluster, levels = timepoint_order)
+
+# ---- Optional: Keep only unique pathways (appear in 1 cluster) ----
+unique_df <- ck_df %>%
+  group_by(ID) %>%
+  filter(n_distinct(Cluster) == 1) %>%
+  ungroup()
+
+# ---- Select top 5 GO terms per cluster by adjusted p-value ----
+top_terms <- unique_df %>%
+  group_by(Cluster) %>%
+  slice_min(order_by = p.adjust, n = 5) %>%
+  ungroup()
+
+# ---- Create bar plot ----
+ggplot(top_terms, aes(x = zScore, y = reorder(Description, zScore), fill = Cluster)) +
+  geom_col() +
+  scale_fill_manual(values = timepoint_colors) +
+  facet_wrap(~ Cluster, scales = "free_y", ncol = 1) +
+  theme_minimal(base_size = 14) +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(size = 12)
+  ) +
+  labs(
+    x = "-log10(adj. p-value)",
+    y = "GO Term",
+    fill = "Timepoint",
+    title = "Top Enriched GO Terms per Timepoint"
+  ) + theme_ggprism_mod()
+
+# ---- Save figure ----
+ggsave("Mouse_GO_TopTerms_Barplot_Nightfall.svg", width = 12, height = 12)
+
+
+
+# Heatmap section
+# Top 30 genes per timepoint
+top_genes_list <- lapply(names(de_genes_list), function(tp) {
+  top <- head(de_genes_list[[tp]][order(-de_genes_list[[tp]]$avg_log2FC), ], 50)
+  transform(top, condition = tp)
+})
+top.genes <- do.call(rbind, top_genes_list)
+mouse_genes <- unique(top.genes$gene)
+mouse_genes <- setdiff(mouse_genes, "Gm42418")
+
+# Scale and extract matrix
+alldata <- ScaleData(alldata, features = mouse_genes)
+mouse_genes <- intersect(mouse_genes, rownames(alldata))
+matDE1 <- GetAssayData(alldata, slot = "scale.data")[mouse_genes, ]
+
+# Order meta
+meta <- alldata@meta.data[colnames(matDE1), ]
+meta$order <- paste(meta$timepoint, meta$metaclusters, sep = "_")
+ordered_cells <- rownames(meta[order(meta$timepoint, meta$metaclusters), ])
+matDE1 <- matDE1[, ordered_cells, drop = FALSE]
+
+# Annotations
+metacluster_colors <- c(
+  "IFE Keratinocytes" = "#364B9A",
+  "HF Keratinocytes"  = "#56B4E9",
+  "Sebocytes"         = "#8DD3C7",
+  "Fibroblasts"       = "indianred2",
+  "Immune cells"      = "#198F1B",
+  "Endothelial cells" = "#F6C800",
+  "Pericytes"         = "#D12E82",
+  "Muscle cells"            = "orange2",
+  "Schwann cells"     = "purple",
+  "Melanocytes"       = "pink1",
+  "Adipocytes"        = "deeppink",
+  "Red Blood Cells"   = "#A7222B"
+)
+timepoint_colors <- color("nightfall")(7)
+names(timepoint_colors) <- c("UW", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW")
+
+col_annot <- HeatmapAnnotation(
+  df = meta[ordered_cells, c("metaclusters", "timepoint")],
+  col = list(
+    metaclusters = metacluster_colors,
+    timepoint = timepoint_colors
+  )
+)
+
+col_fun <- colorRamp2(c(-1, 0, 2), c("blue", "white", "red"))
+
+# Save heatmap
+png(file = "Mouse_HeatmapByTimepoint-Metacluster_TopGenes.png",
+    width = 12, height = 15, units = 'in', bg = "transparent", res = 300)
+hm <- Heatmap(
+  matDE1,
+  name = "logFC\n(Z-score)",
+  top_annotation = col_annot,
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+  row_names_max_width = unit(10, "cm"),
+  show_column_names = FALSE,
+  show_heatmap_legend = TRUE,
+  col = col_fun,
+  column_names_rot = 45,
+  column_gap = unit(5, 'mm')
+)
+draw(hm, merge_legend = TRUE)
+dev.off()
+
+
+
+```
+```{r Keratinocyte Specfic Gene Ontology Bar Plots (Differential Expression)}
+name = "Keratinocytes"
+alldata.1 = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Skin Wound Healing Atlas/3. Subclustering/Keratinocyte Subclustering/KeratinocytesAnnotated_2025-07-07.rds")
+colors_pals = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 1/color_palette.rds")
+
+
+ife_levels <- c("Ker.Cycling I",
+  "Basal II", "Basal III", "Basal IV",
+  "Spinous I", "Spinous II", "Spinous III", "Spinous IV",
+  "Cornified"
+)
+
+alldata.1 = subset(alldata.1, ident = ife_levels)
+
+
+alldata.1$celltype <- Idents(alldata.1)
+# Update timepoint names
+alldata.1@meta.data$timepoint <- recode(alldata.1@meta.data$timepoint,
+  "Unwounded" = "UW",
+  "Wounded_D1PW" = "D1PW",
+  "Wounded_D2PW" = "D2PW",
+  "Wounded_D4PW" = "D4PW",
+  "Wounded_D7PW" = "D7PW",
+  "Wounded_D15PW" = "D15PW",
+  "Wounded_D30PW" = "D30PW"
+)
+
+# ---- Libraries ----
+library(Seurat)
+library(DElegate)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(dplyr)
+library(ggplot2)
+library(khroma)
+
+# ---- DE + GO on full alldata.1 ----
+run_DE_GO_analysis <- function(alldata.1) {
+  
+  # ---- Run DE for pairwise comparisons ----
+  de_results.04 <- DElegate::findDE(
+    object = alldata.1,
+    compare = c("D4PW", "UW"),
+    method = "deseq",
+    group_column = "timepoint",
+    replicate_column = "orig.ident"
+  )
+  
+  de_results.47 <- DElegate::findDE(
+    object = alldata.1,
+    compare = c("D7PW", "D4PW"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  
+  de_results.715 <- DElegate::findDE(
+    object = alldata.1,
+    compare = c("D15PW", "D7PW"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  
+  de_results.1530 <- DElegate::findDE(
+    object = alldata.1,
+    compare = c("D30PW", "D15PW"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  
+  # ---- Filter DE results ----
+  x <- .5     # logFC threshold
+  y <- 0.01   # padj threshold
+  
+  res.04   <- subset(de_results.04, padj < y & log_fc > x)
+  res.47   <- subset(de_results.47, padj < y & log_fc > x)
+  res.715  <- subset(de_results.715, padj < y & log_fc > x)
+  res.1530 <- subset(de_results.1530, padj < y & log_fc > x)
+  
+  # ---- Map SYMBOL to ENTREZ ----
+  ids.04   <- bitr(res.04$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.47   <- bitr(res.47$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.715  <- bitr(res.715$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.1530 <- bitr(res.1530$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  
+  genelist <- list(
+    D4PW_vs_UW      = ids.04$ENTREZID,
+    D7PW_vs_D4PW    = ids.47$ENTREZID,
+    D15PW_vs_D7PW   = ids.715$ENTREZID,
+    D30PW_vs_D15PW  = ids.1530$ENTREZID
+  )
+  
+  # ---- GO enrichment ----
+  ck <- compareCluster(
+    geneCluster = genelist,
+    fun = enrichGO,
+    OrgDb = org.Mm.eg.db,
+    pvalueCutoff = 0.05,
+    ont = "BP"
+  )
+  ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
+  
+  ck_df <- as.data.frame(ck)
+  
+  # ---- Keep unique pathways ----
+  unique_df <- ck_df %>%
+    group_by(ID) %>%
+    filter(n_distinct(Cluster) == 1) %>%
+    ungroup()
+  
+  # ---- Select top 5 per comparison ----
+  top_terms <- unique_df %>%
+    group_by(Cluster) %>%
+    slice_min(order_by = p.adjust, n = 8) %>%
+    ungroup()
+  
+  # ---- Order comparisons ----
+  comp_order <- c("D4PW_vs_UW", "D7PW_vs_D4PW", "D15PW_vs_D7PW", "D30PW_vs_D15PW")
+  top_terms$Cluster <- factor(top_terms$Cluster, levels = comp_order)
+  
+  # ---- Colors (nightfall palette) ----
+  comp_colors <- color("nightfall")(length(comp_order))
+  names(comp_colors) <- comp_order
+  
+  # ---- Plot by Z-score ----
+  p <- ggplot(top_terms,
+              aes(x = zScore,
+                  y = reorder(Description, zScore),
+                  fill = Cluster)) +
+    geom_col() +
+    scale_fill_manual(values = comp_colors) +
+    facet_wrap(~ Cluster, scales = "free_y", ncol = 1) +
+    theme_ggprism_mod(base_size = 14) +
+    theme(
+      strip.text = element_text(face = "bold", size = 14),
+      axis.text.y = element_text(size = 12, face = "bold"),
+      axis.text.x = element_text(size = 12),
+      legend.position = "none"
+    ) +
+    labs(
+      x = "Z-score",
+      y = "GO Term",
+      title = ""
+    )
+  
+  # ---- Save outputs ----
+  ggsave("GO_TopTerms_Keratinocytes_Barplot_Nightfall.svg",
+         p, width = 10, height = 10, dpi = 300)
+  write.csv(ck_df, "GO_Keratinocytes_results.csv", row.names = FALSE)
+  
+  print(p)
+  
+}
+
+# ---- Run ----
+run_DE_GO_analysis(alldata.1)
+
+
+
+
+p <- ggplot(top_terms,
+              aes(x = zScore,
+                  y = reorder(Description, zScore),
+                  fill = Cluster)) +
+    geom_col() +
+    scale_fill_manual(values = comp_colors) +
+    facet_wrap(~ Cluster, scales = "free_y", ncol = 1) +
+    theme_ggprism_mod(base_size = 14) +
+    theme(
+      strip.text = element_text(face = "bold", size = 14),
+      axis.text.y = element_text(size = 12, face = "bold"),
+      axis.text.x = element_text(size = 12),
+      legend.position = "none"
+    ) +
+    labs(
+      x = "Z-score",
+      y = "GO Term",
+      title = "Top Enriched GO Terms across Timepoints (Keratinocytes)"
+    )
+
+```
+
+
+```{r Global Gene Ontology Across Timepoints}
+
+alldata = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Skin Wound Healing Atlas/IntegratedMultimodal_FineCellTypes_061225.rds")
+colors_pals = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 1/color_palette.rds")
+
+alldata$celltype <- Idents(alldata)
+# Update timepoint names
+alldata@meta.data$timepoint <- recode(alldata@meta.data$timepoint,
+  "Unwounded" = "UW",
+  "Wounded_D1PW" = "D1PW",
+  "Wounded_D2PW" = "D2PW",
+  "Wounded_D4PW" = "D4PW",
+  "Wounded_D7PW" = "D7PW",
+  "Wounded_D15PW" = "D15PW",
+  "Wounded_D30PW" = "D30PW"
+)
+
+# ---- Libraries ----
+library(Seurat)
+library(DElegate)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(dplyr)
+library(ggplot2)
+library(khroma)
+library(CellChat)
+
+# ---- DE + GO on full alldata ----
+run_DE_GO_analysis <- function(alldata) {
+  
+  # ---- Run DE for pairwise comparisons ----
+  de_results.04 <- DElegate::findDE(
+    object = alldata,
+    compare = c("D4PW", "UW"),
+    method = "deseq",
+    group_column = "timepoint",
+    replicate_column = "orig.ident"
+  )
+  
+  de_results.47 <- DElegate::findDE(
+    object = alldata,
+    compare = c("D7PW", "D4PW"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  
+  de_results.715 <- DElegate::findDE(
+    object = alldata,
+    compare = c("D15PW", "D7PW"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  
+  de_results.1530 <- DElegate::findDE(
+    object = alldata,
+    compare = c("D30PW", "D15PW"),
+    method = "deseq",
+    group_column = "timepoint"
+  )
+  
+  # ---- Filter DE results ----
+  x <- 0     # logFC threshold
+  y <- 0.01   # padj threshold
+  
+  res.04   <- subset(de_results.04, padj < y & log_fc > x)
+  res.47   <- subset(de_results.47, padj < y & log_fc > x)
+  res.715  <- subset(de_results.715, padj < y & log_fc > x)
+  res.1530 <- subset(de_results.1530, padj < y & log_fc > x)
+  
+  # ---- Map SYMBOL to ENTREZ ----
+  ids.04   <- bitr(res.04$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.47   <- bitr(res.47$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.715  <- bitr(res.715$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  ids.1530 <- bitr(res.1530$feature, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+  
+  genelist <- list(
+    D4PW_vs_UW      = ids.04$ENTREZID,
+    D7PW_vs_D4PW    = ids.47$ENTREZID,
+    D15PW_vs_D7PW   = ids.715$ENTREZID,
+    D30PW_vs_D15PW  = ids.1530$ENTREZID
+  )
+  
+  # ---- GO enrichment ----
+  ck <- compareCluster(
+    geneCluster = genelist,
+    fun = enrichGO,
+    OrgDb = org.Mm.eg.db,
+    pvalueCutoff = 0.05,
+    ont = "BP"
+  )
+  ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
+  
+  ck_df <- as.data.frame(ck)
+  
+  # ---- Keep unique pathways ----
+  unique_df <- ck_df %>%
+    group_by(ID) %>%
+    filter(n_distinct(Cluster) == 2) %>%
+    ungroup()
+  
+  # ---- Select top 5 per comparison ----
+  top_terms <- unique_df %>%
+    group_by(Cluster) %>%
+    slice_min(order_by = p.adjust, n = 8) %>%
+    ungroup()
+  
+  # ---- Order comparisons ----
+  comp_order <- c("D4PW_vs_UW", "D7PW_vs_D4PW", "D15PW_vs_D7PW", "D30PW_vs_D15PW")
+  top_terms$Cluster <- factor(top_terms$Cluster, levels = comp_order)
+  
+  # ---- Colors (nightfall palette) ----
+  comp_colors <- color("nightfall")(length(comp_order))
+  names(comp_colors) <- comp_order
+  
+  # ---- Plot by Z-score ----
+  p <- ggplot(top_terms,
+              aes(x = zScore,
+                  y = reorder(Description, zScore),
+                  fill = Cluster)) +
+    geom_col() +
+    scale_fill_manual(values = comp_colors) +
+    facet_wrap(~ Cluster, scales = "free_y", ncol = 1) +
+    theme_ggprism_mod(base_size = 14) +
+    theme(
+      strip.text = element_text(face = "bold", size = 14),
+      axis.text.y = element_text(size = 12, face = "bold"),
+      axis.text.x = element_text(size = 12),
+      legend.position = "none"
+    ) +
+    labs(
+      x = "Z-score",
+      y = "GO Term",
+      title = ""
+    )
+  
+  # ---- Save outputs ----
+  ggsave("GO_TopTerms_Gloabal_Barplot_NightfallNew.svg",
+         p, width = 10, height = 10, dpi = 300)
+  write.csv(ck_df, "GO_Global_resultsNew.csv", row.names = FALSE)
+  
+  print(p)
+  
+}
+
+# ---- Run ----
+options(future.globals.maxSize = 8000 * 1024^2)
+run_DE_GO_analysis(alldata)
+
+
+
+
+p <- ggplot(top_terms,
+              aes(x = zScore,
+                  y = reorder(Description, zScore),
+                  fill = Cluster)) +
+    geom_col() +
+    scale_fill_manual(values = comp_colors) +
+    facet_wrap(~ Cluster, scales = "free_y", ncol = 1) +
+    theme_ggprism_mod(base_size = 14) +
+    theme(
+      strip.text = element_text(face = "bold", size = 14),
+      axis.text.y = element_text(size = 12, face = "bold"),
+      axis.text.x = element_text(size = 12),
+      legend.position = "none"
+    ) +
+    labs(
+      x = "Z-score",
+      y = "GO Term",
+      title = "Top Enriched GO Terms across Timepoints (Keratinocytes)"
+    )
+```
+```{r}
+# ---- Libraries ----
+# ========================================
+# Differential Expression Heatmap (Grouped by Peak Timepoint)
+# ========================================
+
+# ---- Libraries ----
+library(Seurat)
+library(dplyr)
+library(ComplexHeatmap)
+library(circlize)
+library(khroma)
+library(ggplot2)
+library(grid)
+
+# ---- Create a named list of DE results ----
+de_results_list <- list(
+  D4_vs_UW   = res.04,
+  D7_vs_D4   = res.47,
+  D15_vs_D7  = res.715,
+  D30_vs_D15 = res.1530
+)
+
+# ---- Define Nightfall colors for timepoints ----
+timepoint_colors <- color("nightfall")(7)
+names(timepoint_colors) <- c("UW", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW")
+
+# ---- Define metacluster colors ----
+metacluster_colors <- c(
+  "IFE Keratinocytes" = "#364B9A",
+  "HF Keratinocytes"  = "#56B4E9",
+  "Sebocytes"         = "#8DD3C7",
+  "Fibroblasts"       = "#F95B3C",
+  "Immune cells"      = "#198F1B",
+  "Endothelial cells" = "#F6C800",
+  "Pericytes"         = "#D12E82",
+  "Muscle cells"      = "#EC6F2D",
+  "Schwann cells"     = "#7A4FCF",
+  "Melanocytes"       = "#FA5B77",
+  "Adipocytes"        = "#19A1D1",
+  "Red Blood Cells"   = "#A7222B"
+)
+
+# ---- Prepare top genes list, filter by logFC and rate thresholds ----
+logFC_min <- -10
+logFC_max <- 10
+
+top_genes_list <- lapply(names(de_results_list), function(tp) {
+  df <- de_results_list[[tp]] %>%
+    filter(
+      log_fc > logFC_min & log_fc <= logFC_max,
+      (rate1 > 0.15 | rate2 > 0.15)   # rate filter
+    ) %>%
+    arrange(-log_fc) %>%
+    head(200)
+  df$timepoint <- tp
+  return(df)
+})
+
+top_genes_df <- do.call(rbind, top_genes_list)
+
+# Remove unwanted genes
+genes_to_plot <- setdiff(unique(top_genes_df$feature), "Gm42418")
+
+# ---- Scale data in Seurat ----
+alldata <- ScaleData(alldata, features = genes_to_plot)
+genes_to_plot <- intersect(genes_to_plot, rownames(alldata))
+mat <- GetAssayData(alldata, slot = "scale.data")[genes_to_plot, ]
+
+# ---- Order cells by timepoint and metacluster ----
+meta <- alldata@meta.data[colnames(mat), ]
+meta$order <- paste(meta$timepoint, meta$metaclusters, sep = "_")
+ordered_cells <- rownames(meta[order(meta$timepoint, meta$metaclusters), ])
+mat <- mat[, ordered_cells, drop = FALSE]
+
+# ---- Compute average expression per timepoint ----
+time_levels <- c("UW", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW")
+
+avg_by_time <- sapply(time_levels, function(tp) {
+  cells_tp <- rownames(meta[meta$timepoint == tp, ])
+  if (length(cells_tp) > 1) {
+    rowMeans(mat[, cells_tp, drop = FALSE])
+  } else if (length(cells_tp) == 1) {
+    mat[, cells_tp, drop = FALSE]
+  } else {
+    # handle missing timepoints gracefully
+    rep(NA, nrow(mat))
+  }
+})
+
+# ---- Align row names and remove incomplete rows ----
+rownames(avg_by_time) <- rownames(mat)
+avg_by_time <- avg_by_time[complete.cases(avg_by_time), , drop = FALSE]
+
+# ---- Determine peak timepoint for each gene ----
+gene_peak_tp <- apply(avg_by_time, 1, function(x) names(which.max(x)))
+gene_peak_tp <- factor(gene_peak_tp, levels = time_levels)
+
+# ---- Ensure matching order ----
+gene_peak_tp <- gene_peak_tp[rownames(avg_by_time)]
+mat <- mat[rownames(avg_by_time), , drop = FALSE]
+
+# ---- Reorder genes by peak timepoint and mean expression ----
+gene_order <- order(gene_peak_tp, rowMeans(avg_by_time))
+mat <- mat[gene_order, , drop = FALSE]
+# ---- Column annotations ----
+col_annot <- HeatmapAnnotation(
+  df = meta[ordered_cells, c("metaclusters", "timepoint")],
+  col = list(
+    metaclusters = metacluster_colors,
+    timepoint = timepoint_colors
+  )
+)
+
+# ---- Heatmap color scale ----
+col_fun <- colorRamp2(c(-1, 0, 2), c("blue", "white", "red"))
+
+# ---- Plot heatmap ----
+png(
+  filename = "Mouse_Heatmap_TopGenes_GroupedByTimepoint.png",
+  width = 12, height = 15, units = "in", res = 300, bg = "transparent"
+)
+
+hm <- Heatmap(
+  mat,
+  name = "Expression\n(Z-score)",
+  top_annotation = col_annot,
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+  row_names_max_width = unit(10, "cm"),
+  show_column_names = FALSE,
+  show_heatmap_legend = TRUE,
+  col = col_fun,
+  column_names_rot = 45,
+  column_gap = unit(5, "mm")
+)
+
+draw(hm, merge_legend = TRUE)
+dev.off()
+
+```
+```{r}
+library(dplyr)
+library(ComplexHeatmap)
+library(circlize)
+library(grid)
+
+# ---- Combine DE results into one matrix ----
+de_results_list <- list(
+  D4_vs_UW   = de_results.04,
+  D7_vs_D4   = de_results.47,
+  D15_vs_D7  = de_results.715,
+  D30_vs_D15 = de_results.1530
+)
+
+# ---- Create gene x timepoint matrix and cap logFC ----
+logFC_cap <- 5
+
+all_genes <- unique(unlist(lapply(de_results_list, function(x) x$feature)))
+
+logFC_mat <- sapply(names(de_results_list), function(tp) {
+  df <- de_results_list[[tp]]
+  vals <- setNames(df$log_fc, df$feature)
+  vals[all_genes]
+})
+logFC_mat[is.na(logFC_mat)] <- 0
+logFC_mat <- pmin(pmax(logFC_mat, -logFC_cap), logFC_cap)  # cap logFC at ±5
+rownames(logFC_mat) <- all_genes
+
+# ---- Define colors for timepoints ----
+timepoint_colors <- color("nightfall")(length(names(de_results_list)))
+names(timepoint_colors) <- names(de_results_list)
+
+col_fun <- colorRamp2(c(-logFC_cap, 0, logFC_cap), c("blue", "white", "red"))
+
+# ---- Save heatmap as PNG ----
+png(filename = "Mouse_LogFC_Heatmap_Capped.png",
+    width = 12, height = 15, units = "in", res = 300, bg = "transparent")
+
+Heatmap(
+  logFC_mat,
+  name = "logFC",
+  cluster_rows = TRUE,          # cluster genes to show temporal patterns
+  cluster_columns = FALSE,      # keep timepoints in chronological order
+  col = col_fun,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  column_names_side = "top",
+  row_names_gp = gpar(fontsize = 6),
+  clustering_method_rows = "complete"
+)
+
+dev.off()
+```
+
+```{r}
+# 1. Load required libraries
+library(Seurat)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(dplyr)
+library(ggplot2)
+library(khroma)
+
+# 2. Prepare Data & Create Grouping
+# Group scRNAseq and CITEseq as 'Whole Cell', and snRNAseq as 'Nuclei'
+alldata@meta.data <- alldata@meta.data %>%
+  mutate(modality_group = case_when(
+    modality %in% c("scRNAseq", "CITEseq") ~ "Whole Cell",
+    modality == "snRNAseq" ~ "Nuclei",
+    TRUE ~ modality
+  ))
+
+# Set active identity and factor levels
+group_order <- c("Whole Cell", "Nuclei")
+alldata@meta.data$modality_group <- factor(alldata@meta.data$modality_group, levels = group_order)
+Idents(alldata) <- "modality_group"
+DefaultAssay(alldata) <- "RNA"
+alldata <- JoinLayers(alldata)
+
+# 3. Find markers for the new groups
+cellmarkers_group <- FindAllMarkers(alldata, 
+                                    min.pct = 0.30, 
+                                    recorrect_umi = FALSE, 
+                                    only.pos = TRUE)
+
+# 4. Gene Ontology Analysis
+# Convert to ENTREZ IDs
+gene_lists_entrez <- lapply(group_order, function(grp) {
+  genes <- subset(cellmarkers_group, cluster == grp & avg_log2FC > 1)$gene
+  if(length(genes) == 0) return(NULL)
+  bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)$ENTREZID
+})
+names(gene_lists_entrez) <- group_order
+gene_lists_entrez <- gene_lists_entrez[!sapply(gene_lists_entrez, is.null)]
+
+# Run compareCluster
+ck <- compareCluster(geneCluster = gene_lists_entrez, 
+                    fun = enrichGO, 
+                    OrgDb = org.Mm.eg.db, 
+                    pvalueCutoff = 0.05, 
+                    ont = "BP")
+
+# Clean up results
+ck <- setReadable(ck, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
+ck_df <- as.data.frame(ck)
+
+# 5. Save the CSV results
+write.csv(ck_df, file = "GO_Results_WholeCell_vs_Nuclei.csv", row.names = FALSE)
+
+# 6. Filter for Unique Pathways & Top Terms
+# Keeping pathways that only appear in one of the two groups
+unique_terms <- ck_df %>%
+  group_by(ID) %>%
+  filter(n_distinct(Cluster) == 1) %>%
+  ungroup() %>%
+  mutate(logP = -log10(p.adjust))
+
+# 7. Generate Separate Barplots
+# Define specific colors from the Nightfall palette
+group_colors <- c("Whole Cell" = "#1A1A1A", "Nuclei" = "#5D3A9B")
+
+for (grp in names(gene_lists_entrez)) {
+  
+  # Select top 10 unique terms for this group
+  plot_data <- unique_terms %>%
+    filter(Cluster == grp) %>%
+    slice_min(order_by = p.adjust, n = 10)
+  
+  # Create Plot
+  p <- ggplot(plot_data, aes(x = logP, y = reorder(Description, logP))) +
+    geom_col(fill = group_colors[grp], color = "black", width = 0.7) +
+    theme_minimal(base_size = 14) +
+    theme(
+      axis.text.y = element_text(size = 12, face = "bold", color = "black"),
+      axis.text.x = element_text(size = 12, color = "black"),
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 16)
+    ) +
+    labs(
+      x = "-log10(adj. p-value)",
+      y = NULL,
+      title = paste("Unique GO Terms:", grp)
+    )
+  
+  # Save plot
+  file_name <- paste0("GO_Barplot_", gsub(" ", "_", grp), ".svg")
+  ggsave(file_name, plot = p, width = 9, height = 7)
+  
+  # Print to show in plot window
+  print(p)
+}
+```
+
+```{r}
+# 1. Setup Groups
+alldata@meta.data <- alldata@meta.data %>%
+  mutate(modality_group = case_when(
+    modality %in% c("scRNAseq", "CITEseq") ~ "Whole Cell",
+    modality == "snRNAseq" ~ "Nuclei",
+    TRUE ~ modality
+  ))
+
+modality_groups <- c("Whole Cell", "Nuclei")
+full_timepoints <- c("UW", "D4PW", "D7PW", "D15PW", "D30PW")
+nuclei_timepoints <- c("UW", "D4PW", "D7PW", "D15PW", "D30PW")
+
+# 2. Loop with robust subsetting
+for (m_grp in modality_groups) {
+  
+  message(paste("\n--- Starting Analysis for:", m_grp, "---"))
+  
+  # A. Subset by Modality Group
+  obj_sub <- subset(alldata, modality_group == m_grp)
+  
+  # B. Filter out any cells that don't belong to the desired timepoints
+  target_tps <- if(m_grp == "Nuclei") nuclei_timepoints else full_timepoints
+  
+  # Ensure we only keep cells that are actually in our target list
+  cells_to_keep <- rownames(obj_sub@meta.data[obj_sub@meta.data$timepoint %in% target_tps, ])
+  obj_sub <- subset(obj_sub, cells = cells_to_keep)
+  
+  # C. Fix Factors: This removes 'ghost' levels that have 0 cells
+  obj_sub$timepoint <- factor(as.character(obj_sub$timepoint), levels = target_tps)
+  Idents(obj_sub) <- "timepoint"
+  
+  # D. Prepare Layers (Required for FindAllMarkers in Seurat v5)
+  obj_sub <- JoinLayers(obj_sub)
+  
+  # 3. Find Markers
+  message("Finding markers...")
+  markers <- tryCatch({
+    FindAllMarkers(obj_sub, 
+                   only.pos = TRUE, 
+                   min.pct = 0.25, 
+                   logfc.threshold = 0.5) 
+  }, error = function(e) {
+    message(paste("Error in FindAllMarkers for", m_grp, ":", e))
+    return(NULL)
+  })
+  
+  if (is.null(markers) || nrow(markers) == 0) {
+    message(paste("No markers found for", m_grp))
+    next
+  }
+
+  # 4. Filter and Convert to Entrez
+  # Only use clusters that actually returned markers
+  existing_clusters <- intersect(levels(obj_sub$timepoint), unique(markers$cluster))
+  
+  gene_list <- lapply(existing_clusters, function(tp) {
+    genes <- markers %>% filter(cluster == tp) %>% pull(gene)
+    if(length(genes) < 3) return(NULL) 
+    
+    entrez <- bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db, drop = TRUE)$ENTREZID
+    return(entrez)
+  })
+  names(gene_list) <- existing_clusters
+  gene_list <- gene_list[!sapply(gene_list, is.null)]
+
+  if (length(gene_list) == 0) {
+    message("No gene lists found for GO.")
+    next
+  }
+
+  # 5. GO Enrichment
+  message("Running GO Enrichment...")
+  ck <- compareCluster(geneCluster = gene_list, 
+                       fun = enrichGO, 
+                       OrgDb = org.Mm.eg.db, 
+                       ont = "BP", 
+                       pvalueCutoff = 0.05)
+  
+  ck <- simplify(setReadable(ck, OrgDb = org.Mm.eg.db, keyType = "ENTREZID"))
+  
+  # 6. Save CSV
+  write.csv(as.data.frame(ck), 
+            file = paste0("GO_Timepoint_Results_", gsub(" ", "_", m_grp), ".csv"), 
+            row.names = FALSE)
+  
+  # 7. Visualization
+  p <- dotplot(ck, showCategory = 5) + 
+    scale_color_gradientn(colors = c("blue", "white", "red")) +
+    labs(title = paste("Pathways Over Time:", m_grp), x = "Timepoint") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),
+          axis.text.y = element_text(size = 9, face = "bold", color = "black"))
+  
+  ggsave(paste0("GO_Timepoint_Dotplot_", gsub(" ", "_", m_grp), ".svg"), 
+         plot = p, width = 10, height = 12)
+  
+  print(p)
+}
+```
+
