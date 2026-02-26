@@ -173,7 +173,23 @@ source_meta <- list(
     "D15PW_CITEseq_1" = "Mixed","D15PW_CITEseq_2" = "Mixed","D30PW_snRNAseq_1" = "Female",
     "D30PW_snRNAseq_2" = "Male", "D30PW_CITEseq_1" = "Mixed","D30PW_CITEseq_2" = "Mixed"
   ),
-  chem = c("UW_Haensel1"="10X Chromium v1", "UW_Vu_v3"="10X Chromium v3")
+  chem = c(
+    "UW_Haensel1" = "10X Chromium v1","UW_Haensel2" = "10X Chromium v1","UW_Vu_v3" = "10X Chromium v3",
+    "UW_snRNAseq_1" = "10X Chromium v3","UW_snRNAseq_2" = "10X Chromium GEM-X",
+    "UW_snRNAseq_3" = "10X Chromium GEM-X","UW_CITEseq_1" = "10X Chromium v3",
+    "UW_CITEseq_2" = "10X Chromium v3","D1PW_Justynski" = "10X Chromium v3",
+    "D2PW_Justynski" = "10X Chromium v3","D4PW_Haensel1" = "10X Chromium v1",
+    "D4PW_Haensel2" = "10X Chromium v1", "D4PW_Haensel3" = "10X Chromium v1",
+    "D4PW_Vu_v3" = "10X Chromium v3","D4PW_snRNAseq_1" = "10X Chromium GEM-X",
+    "D4PW_snRNAseq_2" = "10X Chromium GEM-X","D4PW_snRNAseq_3" = "10X Chromium GEM-X",
+    "D4PW_snRNAseq_4" = "10X Chromium GEM-X","D7PW_Vu_v2_1" = "10X Chromium v2",
+    "D7PW_Vu_v2_2" = "10X Chromium v2","D7PW_Vu_v3" = "10X Chromium v3",
+    "D7PW_snRNAseq_1" = "10X Chromium v3","D7PW_snRNAseq_2" = "10X Chromium v3",
+    "D15PW_snRNAseq_1" = "10X Chromium v3","D15PW_snRNAseq_2" = "10X Chromium v3",
+    "D15PW_CITEseq_1" = "10X Chromium v3","D15PW_CITEseq_2" = "10X Chromium v3",
+    "D30PW_snRNAseq_1" = "10X Chromium v3","D30PW_snRNAseq_2" = "10X Chromium v3",
+    "D30PW_CITEseq_1" = "10X Chromium v3", "D30PW_CITEseq_2" = "10X Chromium v3"
+  )
 )
 
 ##4. Quality Control and Scoring
@@ -246,14 +262,6 @@ modality_stats <- CellCountChiSquareAnalysis(alldata, "modality")
 
 
 #8. Integration Pipeline
-
-# Reset timepoints to long format
-alldata$timepoint <- case_when(
-  alldata$timepoint == "UW" ~ "Unwounded",
-  alldata$timepoint == "D1PW" ~ "Wounded_D1PW",
-  # [Rest of mapping]
-  TRUE ~ as.character(alldata$timepoint)
-)
 
 alldata[["RNA"]] <- split(alldata[["RNA"]], f = alldata$orig.ident)
 
