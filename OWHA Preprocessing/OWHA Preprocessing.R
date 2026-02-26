@@ -5,7 +5,7 @@ title: "Multimodal Atlas Preprocessing"
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 # --- USER CONFIGURATION ---
-data_root <- "~/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Skin Wound Healing Atlas"
+data_root <- ##"local directory"
 # ---------------------------
 
 library(Seurat)
@@ -46,8 +46,7 @@ sn_base <- file.path(data_root, "Raw Data/snRNAseq Raw Data")
 sn_dirs <- list(
   YJ001_uw = "YJ001_UW", YJ002_d7 = "YJ002_DPW7", YJ003_d7 = "YJ003_DPW7",
   YJ004_d15 = "YJ004_DPW15", YJ005_d15 = "YJ005_DPW15", YJ006_d30 = "YJ006_DPW30",
-  YJ007_d30 = "YJ007_DPW30", YJ008_uw = "YJ008_UWO", YJ009_d4 = "YJ009_DPW4",
-  YJ010_d4 = "YJ0010_DPW4", 
+  YJ007_d30 = "YJ007_DPW30",
   YJ011_uw = "YJ011_UW/YJ011_cellranger_count_outs/filtered_feature_bc_matrix",
   YJ012_d4 = "YJ012_D4PW/YJ012_cellranger_count_outs/filtered_feature_bc_matrix",
   YJ013_d4 = "YJ013_D4PW/YJ012_cellranger_count_outs/filtered_feature_bc_matrix"
@@ -126,8 +125,8 @@ vu_objs <- list(
 )
 
 sn_projects <- c("UW_snRNAseq_1", "D7PW_snRNAseq_1", "D7PW_snRNAseq_2", "D15PW_snRNAseq_1", 
-                 "D15PW_snRNAseq_2", "D30PW_snRNAseq_1", "D30PW_snRNAseq_2", "UW_snRNAseq_2", 
-                 "D4PW_snRNAseq_1", "D4PW_snRNAseq_2", "UW_snRNAseq_3", "D4PW_snRNAseq_3", "D4PW_snRNAseq_4")
+                 "D15PW_snRNAseq_2", "D30PW_snRNAseq_1", "D30PW_snRNAseq_2", 
+                  "UW_snRNAseq_3", "D4PW_snRNAseq_3", "D4PW_snRNAseq_4")
 sn_objs <- mapply(function(d, p) CreateSeuratObject(d, project = p, min.cells = 3), 
                   sn_data_list, sn_projects)
 
@@ -159,7 +158,6 @@ alldata$modality <- case_when(
   TRUE ~ "scRNAseq"
 )
 
-alldata$internal_external <- ifelse(alldata$modality == "scRNAseq", "External", "Internal")
 alldata$timepoint_modality <- paste(alldata$timepoint, alldata$modality, sep = "_")
 
 # Add Sex and Chemistry
