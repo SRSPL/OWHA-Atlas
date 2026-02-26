@@ -161,12 +161,20 @@ alldata$modality <- case_when(
 alldata$timepoint_modality <- paste(alldata$timepoint, alldata$modality, sep = "_")
 
 # Add Sex and Chemistry
-# [Note: Map remaining values here as needed]
 source_meta <- list(
-  sex = c("UW_Haensel1"="Female", "D1PW_Justynski"="Male", "D4PW_snRNAseq_2"="Male"),
+  sex = c( "UW_Haensel1" = "Female", "UW_Haensel2" = "Female", "UW_Vu_v3" = "Female", "UW_CITEseq_1" = "Mixed",
+    "UW_CITEseq_2" = "Mixed","UW_snRNAseq_1" = "Mixed","UW_snRNAseq_2" = "Mixed",
+    "UW_snRNAseq_3" = "Mixed","D1PW_Justynski" = "Male","D2PW_Justynski" = "Male",
+    "D4PW_Haensel1" = "Female","D4PW_Haensel2" = "Female","D4PW_Haensel3" = "Female",
+    "D4PW_Vu_v3" = "Female","D4PW_snRNAseq_1" = "Female","D4PW_snRNAseq_2" = "Male",
+    "D4PW_snRNAseq_3" = "Female","D4PW_snRNAseq_4" = "Male","D7PW_Vu_v2_1" = "Female",
+    "D7PW_Vu_v2_2" = "Female","D7PW_Vu_v3" = "Female","D7PW_snRNAseq_1" = "Male",
+    "D7PW_snRNAseq_2" = "Mixed", "D15PW_snRNAseq_1" = "Male", "D15PW_snRNAseq_2" = "Female",
+    "D15PW_CITEseq_1" = "Mixed","D15PW_CITEseq_2" = "Mixed","D30PW_snRNAseq_1" = "Female",
+    "D30PW_snRNAseq_2" = "Male", "D30PW_CITEseq_1" = "Mixed","D30PW_CITEseq_2" = "Mixed"
+  ),
   chem = c("UW_Haensel1"="10X Chromium v1", "UW_Vu_v3"="10X Chromium v3")
 )
-
 
 ##4. Quality Control and Scoring
 
