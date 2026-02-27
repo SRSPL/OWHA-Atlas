@@ -10,8 +10,8 @@ OWHA integrates across the full wound healing timeline.:
 
 - Single-nucleus RNA sequencing (snRNA-seq)
 - Single-cell RNA sequencing (scRNA-seq)
-- CITE-seq
-- Vissium High-definition spatial transcriptomics
+- Cellular Indexing of Transcriptomes and Epitopes by sequencing (CITE-seq)
+- Vissium HD (High-definition) spatial transcriptomics
 
 
 Preprint:
@@ -45,13 +45,7 @@ OWHA reveals that wound repair proceeds through sharp transcriptional and cellul
 
 OWHA identifies a previously uncharacterized epithelial subpopulation:
 
-Sox6+ Tspear+ Il20ra+ keratinocytes ("Basal IV")
-
-Detectable by snRNA-seq
-
-Missed in conventional scRNA-seq wound atlases
-
-Spatially enriched at the wound edge during the proliferative phase
+- Sox6+ Tspear+ Il20ra+ keratinocytes ("Basal IV")
 
 After injury, Basal IV cells deviate from canonical differentiation programs and adopt a neurovasculogenic signaling state. They form a transient spatially privileged niche aligned with proliferative endothelial cells, pericytes, and Repair Schwann cells.
 
@@ -65,15 +59,15 @@ This niche synchronizes:
 
 Mechanistically, this coordination is mediated through a conserved Sema3C–Nrp1/Nrp2 signaling axis.
 
-Human Conservation and Disease Relevance
+### Human Conservation and Disease Relevance
 
 Cross-species integration demonstrates that:
 
-### The Basal IV / SEMA3C axis is conserved in human skin
+- The Basal IV / SEMA3C axis is conserved in human skin
 
-It is missed in conventional human scRNA-seq atlases due to dissociation-induced artifacts
+- It is missed in conventional human scRNA-seq atlases due to dissociation-induced artifacts
 
-It is selectively disrupted in diabetic wounds
+- It is selectively disrupted in diabetic wounds
 
 Topical Sema3C restores peri-wound angiogenic sprouting and accelerates re-epithelialization in diabetic ulcers in vivo.
 
@@ -81,161 +75,50 @@ Topical Sema3C restores peri-wound angiogenic sprouting and accelerates re-epith
 
 The repository contains processed datasets, annotations, and reproducible analysis workflows corresponding to the bioRxiv release.
 
-### 1. Processed Single-Cell Objects
-OWHA_Integrated.rds
+### 1. Figures
 
-Integrated single-nucleus RNA-seq object across all timepoints.
-
-Contains:
-
-Raw counts (RNA assay)
-
-SCTransform-normalized data
-
-UMAP embeddings
-
-Cluster annotations
-
-Metacluster annotations
-
-Timepoint metadata
-
-### 2. Spatial Transcriptomics
-OWHA_spatial_integrated.rds
-
-Integrated spatial transcriptomics object across timepoints.
-
-Contains:
-
-Spatial coordinates
-
-Spot-level gene expression
-
-Spatial cluster annotations
-
-Niche classifications
-
-Associated tissue images (if included)
-
-Recommended for:
-Mapping cross-tissue communication and wound-edge niche architecture.
-
-### 3. Annotation Tables
-celltype_annotations.csv
-
-Master annotation table mapping:
-
-Cluster ID
-
-Subcluster ID
-
-Metacluster
-
-Final cell type label
-
-Marker genes
-
-gene_markers_per_cluster.csv
-
-Differential expression results per cluster.
-
-Columns include:
-
-Gene
-
-Cluster
-
-log2 fold change
-
-Adjusted p-value
-
-Percent expressing
-
-### 4. Cross-Species Integration
-mouse_human_integration.rds
-
-Integrated mouse–human epithelial dataset.
-
-Contains:
-
-Ortholog-mapped genes
-
-Conserved cluster annotations
-
-Human Basal IV equivalents
-
-### 5. Signaling and Ligand–Receptor Analyses
-Sema3C_axis_analysis/
-
-Directory containing:
-
-Ligand–receptor interaction scores
-
-CellChat or related interaction outputs
-
-Sema3C–Nrp1/Nrp2 interaction matrices
-
-Network visualizations
-
-### 6. Gene Ontology and Pathway Enrichment
-GO_enrichment_results.csv
-
-Filtered Gene Ontology Biological Process enrichment results.
-
-Includes:
-
-GO term description
-
-Gene ratio
-
-Adjusted p-value
-
-Cluster
-
-Timepoint
-
-### 7. Figures
+```
 figures/
+```
 
-Contains:
+Contains Scripts Relatedted to Producing:
 
-Publication figures
+- Publication figures
 
-Extended data panels
+- UMAP visualizations
 
-UMAP visualizations
+- Spatial overlays
 
-Spatial overlays
+### 2. Analysis Pipelines
 
-Inflection point analyses
-
-### 8. Analysis Pipelines
+```
 scripts/
+```
 
 Reproducible workflows for:
 
-Preprocessing and quality control
+- Preprocessing and quality control
 
-Dataset integration (Seurat-based)
+- Dataset integration (Seurat-based)
 
-Differential expression analysis
+- Differential expression analysis
 
-Gene Ontology enrichment
+- Gene Ontology enrichment
 
-Module scoring
+- Module scoring
 
-Spatial niche alignment
-
-Cross-species integration
+- Cross-species integration
 
 Scripts correspond to the bioRxiv release.
 
 ## Example: Loading the Data in R
-library(Seurat)
 
+```
+library(Seurat)
 owha <- readRDS("OWHA_Integrated.rds")
 DimPlot(owha, group.by = "celltype")
 Citation
+```
 
 ## If you use OWHA, please cite:
 
