@@ -1,9 +1,3 @@
----
-title: "Figure 2 UMAP Making"
-author: "Jonathan Chin Cheong"
-date: "2024-10-21"
-output: html_document
----
 
 ```{r}
 set.seed(123)
