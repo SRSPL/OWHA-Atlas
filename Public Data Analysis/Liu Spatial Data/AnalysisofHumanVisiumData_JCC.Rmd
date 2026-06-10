@@ -1,9 +1,3 @@
----
-title: "Analysis of Human Spatial Data"
-author: "Simon Van Deursen"
-date: '`r Sys.Date()`'
-output: html_document
----
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
