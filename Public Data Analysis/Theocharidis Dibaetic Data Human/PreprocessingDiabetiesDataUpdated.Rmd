@@ -1,0 +1,249 @@
+---
+title: "Human scRNAseq DataSets"
+author: "Jonathan Chin Cheong"
+date: "2025-01-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(Seurat)
+library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(Rfast2)
+library(viridis)
+library(scCustomize)
+library(harmony)
+```
+
+```{r}
+setwd("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Jonathan/Single-Cell RNA seq/Diabetic Ulcer Data")
+
+
+
+# Load raw count matrices (Foot Skin With Non-Healing DFU)
+counts_foot_1 <- read.csv(gzfile("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Jonathan/Single-Cell RNA seq/Diabetic Ulcer Data/GSE165816_RAW/GSM5050530_G6counts.csv.gz"), row.names = 1)
+counts_foot_2 <- read.csv(gzfile("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Jonathan/Single-Cell RNA seq/Diabetic Ulcer Data/GSE165816_RAW/GSM5050533_G9counts.csv.gz"), row.names = 1)
+counts_foot_3 <- read.csv(gzfile("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Jonathan/Single-Cell RNA seq/Diabetic Ulcer Data/GSE165816_RAW/GSM5050557_G33counts.csv.gz"), row.names = 1)
+counts_foot_4 <- read.csv(gzfile("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Jonathan/Single-Cell RNA seq/Diabetic Ulcer Data/GSE165816_RAW/GSM5050558_G34counts.csv.gz"), row.names = 1)
+
+#Foot skin with healing DFU
+count_foot_5 <- read.csv(gzfile(""))
+count_foot_6 <- read.csv(gzfile(""))
+count_foot_7 <- read.csv(gzfile(""))
+count_foot_8 <- read.csv(gzfile(""))
+count_foot_9 <- read.csv(gzfile(""))
+count_foot_10 <- read.csv(gzfile(""))
+count_foot_11 <- read.csv(gzfile(""))
+count_foot_12 <- read.csv(gzfile(""))
+count_foot_9 <- read.csv(gzfile(""))
+
+
+
+
+# Create Seurat objects
+foot_G6    <- CreateSeuratObject(counts = counts_foot_1, min.cells = 3, project = "G6")
+foot_G9    <- CreateSeuratObject(counts = counts_foot_2, min.cells = 3, project = "G9")
+foot_G33   <- CreateSeuratObject(counts = counts_foot_3, min.cells = 3, project = "G33")
+foot_G34   <- CreateSeuratObject(counts = counts_foot_4, min.cells = 3, project = "G34")
+
+```
+
+```{r}
+uwo.26$timepoint <- "Unwounded"
+uwo.27$timepoint <- "Unwounded"
+uwo.28$timepoint <- "Unwounded"
+
+d1pw.26$timepoint <- "D1PW"
+d1pw.27$timepoint <- "D1PW"
+d1pw.28$timepoint <- "D1PW"
+
+d7pw.26$timepoint <-"D7PW"
+d7pw.27$timepoint <-"D7PW"
+d7pw.28$timepoint <-"D7PW"
+
+d30pw.26$timepoint <- "D30PW"
+d30pw.27$timepoint <- "D30PW"
+d30pw.28$timepoint <- "D30PW"
+
+```
+
+
+```{r}
+# Merge foot wound samples
+alldata_foot <- merge(foot_G6, y = c(foot_G9, foot_G33, foot_G34))
+
+# Check identity levels
+levels(Idents(alldata_foot))
+
+# Or check sample IDs if you're interested in the original samples
+levels(factor(alldata_foot$orig.ident))
+```
+
+```{r}
+#List all objects in the environment
+all_objects <- ls()
+#Specify the object you want to keep
+object_to_keep <- "alldata"
+#Filter out the object to keep
+objects_to_remove <- setdiff(all_objects, object_to_keep)
+#Remove the remaining objects
+rm(list = objects_to_remove)
+#Remove the other objects
+rm(all_objects, object_to_keep, objects_to_remove)
+# Verify that only the object to keep remains
+ls()
+```
+
+```{r}
+# Calculate QC metrics
+alldata_foot[["percent_mito"]] <- PercentageFeatureSet(alldata_foot, pattern = "^MT-")
+alldata_foot[["percent_ribo"]] <- PercentageFeatureSet(alldata_foot, pattern = "^RP[SL]")
+
+# QC violin plot
+vln_qc <- VlnPlot(
+  alldata_foot,
+  features = c("nFeature_RNA", "nCount_RNA", "percent_mito", "percent_ribo"),
+  ncol = 2,
+  pt.size = 1
+) & 
+theme(
+  axis.title.x = element_blank(),
+  plot.background = element_rect(fill = "transparent", color = NA)
+)
+
+# Save plot
+ggsave("FootWound_QCplots.png", plot = vln_qc, width = 8, height = 6, dpi = 300, bg = "transparent")
+```
+
+```{r}
+saveRDS(alldata, paste0("LiuHumanData_",Sys.Date(),".rds"))
+alldata <- readRDS("")
+```
+
+
+```{r}
+alldata_foot <- subset(alldata_foot, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent_mito < 10 & percent_ribo < 50)
+Layers(alldata_foot)
+```
+```{r}
+alldata <- JoinLayers(alldata)
+alldata[["RNA"]] <- split(alldata[["RNA"]], f = alldata$orig.ident)
+```
+
+```{r}
+# Join layers for integration
+alldata_foot <- JoinLayers(alldata_foot)
+alldata_foot[["RNA"]] <- split(alldata_foot[["RNA"]], f = alldata_foot$orig.ident)
+
+# Run SCTransform, PCA, clustering, and UMAP
+set.seed(123)
+alldata_foot <- alldata_foot %>%
+  SCTransform(vars.to.regress = "percent_mito", verbose = TRUE) %>%
+  RunPCA(verbose = FALSE)
+
+pcs <- npcs(alldata_foot)
+
+alldata_foot <- alldata_foot %>%
+  FindNeighbors(reduction = "pca", dims = 1:pcs, verbose = FALSE) %>%
+  FindClusters(resolution = 1.5, cluster.name = "pca_clusters", verbose = FALSE) %>%
+  RunUMAP(reduction = "pca", dims = 1:pcs, reduction.name = "umap.pca", verbose = FALSE)
+```
+
+
+```{r}
+alldata_foot <- IntegrateLayers(
+  object = alldata_foot,
+  method = HarmonyIntegration,
+  normalization.method = "SCT",
+  orig.reduction = "pca",
+  new.reduction = "harmony",
+  theta = 3,
+  verbose = FALSE
+)
+
+alldata_foot <- alldata_foot %>%
+  FindNeighbors(reduction = "harmony", dims = 1:pcs) %>%
+  FindClusters(resolution = 0.5, cluster.name = "harmony_clusters") %>%
+  RunUMAP(reduction = "harmony", dims = 1:pcs, reduction.name = "umap.harmony")
+```
+
+
+```{r}
+DimPlot(alldata_foot, label = T, reduction = "umap.harmony")
+
+features = c("KRT14","ITGA6","KRT5","KRT10","TENM2", #Keratincoytes Labels
+             "COL1A2","PDGFRA", #Fibroblast Markers
+             "PTPRC", # Immune Cell Markers
+             "PECAM1", #Endothelial Cell Markers
+             "MYLPF", "DES", # Muscle Markers
+             "RGS5", # Pericytes Markers
+             "MLANA", # Melanocyte Markers
+             "MPZ", #Schwann Cell Markers
+             "ADIPOQ", #Adipocyte Markers
+             "LYVE1", #Lymphatic Vessel Markers
+             "AKR1C18","PPARG", # Sebocyte Markers
+             "LGALS1"
+)
+
+VlnPlot(alldata_foot, features, stack = TRUE, flip = TRUE, assay = "SCT", fill.by = "ident") +
+  theme(legend.position = "none", text = element_text(size = 20, face = "bold"))
+```
+
+```{r}
+
+colorlist <- c("royalblue2",
+               "red3",
+               "forestgreen",
+               "gold2", 
+               "darkorchid3",
+               "orange2",
+               "pink1",
+               "deeppink2",
+               "darkolivegreen2",
+               "coral4",
+               "darkslategrey")
+
+
+new.cluster.ids <- c("Pericytes", #0
+                     "Immune Cells", #1
+                     "Fibroblasts", #2
+                     "Keratinocytes", #3
+                     "Immune Cells", #4
+                     "Endothelial", #5
+                     "Keratinocytes", #6
+                     "Fibroblasts", #7
+                     "Immune Cells", #8
+                     "Immune Cells", #9
+                     "10", #10
+                     "Melanocytes", #11 
+                     "12", #12
+                     "Keratinocytes",#13
+                     "Endothelial", #14
+                     "15"#15
+)
+
+
+alldata_foot = PrepSCTFindMarkers(alldata_foot)
+hold = FindAllMarkers(alldata_foot, only.pos = T)
+
+names(new.cluster.ids) <- levels(alldata_foot)
+alldata_foot.1<- RenameIdents(alldata_foot, new.cluster.ids)
+
+DimPlot(alldata_foot.1,raster = F, cols = colorlist, reduction = "umap.harmony")
+Stacked_VlnPlot(alldata_foot.1, features, x_lab_rotate = )
+FeaturePlot(alldata_foot, "SEMA3C", label = T, reduction = "umap.harmony")
+
+saveRDS(alldata_foot.1, paste0("TheocharidisHumanFootDibaeticData_Labeled",Sys.Date(),".rds"))
+alldata.1 = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Jonathan/Single-Cell RNA seq/Diabetic Ulcer Data/TheocharidisHumanFootDibaeticData_Labeled2025-07-14.rds")
+
+`````````
+
+
+```{r}
+alldata.1 = subset(alldata.1, ident = "Pericytes")
+saveRDS(alldata.1, paste0("TheocharidisHumanFootDibaeticData_PericytesSubset",Sys.Date(),".rds"))
+```
+
+

@@ -1,0 +1,587 @@
+---
+title: "Figure 2 UMAP Making"
+author: "Jonathan Chin Cheong"
+date: "2024-10-21"
+output: html_document
+---
+
+```{r}
+set.seed(123)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Jonathan Current Analysis")
+```
+
+```{r pressure, echo=FALSE}
+#Load Libraries
+library(Seurat)
+library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(Rfast2)
+library(viridis)
+library(scCustomize)
+library(harmony)
+library(khroma)
+```
+
+```{r}
+name = "Endothelial"
+alldata.1 = readRDS("")
+colors_pals = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Figure 1/color_palette.rds")
+
+
+ife_idents <- c(
+  "Basal II", "Basal III", "Basal IV",
+  "Spinous I", "Spinous II", "Spinous III", "Spinous IV",
+  "Cornified"
+)
+
+# Subset the Seurat object
+alldata.1 <- subset(alldata.1, idents = ife_idents)
+
+
+
+alldata.1 = subset(alldata.1, ident = "Basal IV")
+alldata.1$celltype <- Idents(alldata.1)
+# Update timepoint names
+alldata.1@meta.data$timepoint <- recode(alldata.1@meta.data$timepoint,
+  "Unwounded" = "UW",
+  "Wounded_D1PW" = "D1PW",
+  "Wounded_D2PW" = "D2PW",
+  "Wounded_D4PW" = "D4PW",
+  "Wounded_D7PW" = "D7PW",
+  "Wounded_D15PW" = "D15PW",
+  "Wounded_D30PW" = "D30PW"
+)
+
+# If it's a factor, update the levels too
+alldata.1@meta.data$timepoint <- factor(alldata.1@meta.data$timepoint,
+  levels = c("UW", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW"))
+
+
+
+```
+
+```{r}
+Idents(alldata.1) <- "celltype"
+alldata.1 = subset(alldata.1, ident = "snRNAseq")
+
+
+Idents(alldata.1) <- "modality"
+
+```
+
+```{r}
+
+library(dplyr)
+library(tibble)
+library(Seurat)
+library(ggplot2)
+library(ggpubr) 
+library(tidyr)
+
+genes_of_interest <- c("Krt16", "Krt6a", "Krt14", "Krt10", "Krt1", "Cdh13", "Sox6", "Sema3c", "Sema5a")
+
+# Fetch metadata and expression matrix
+meta_data <- alldata.1@meta.data[, c("orig.ident", "timepoint")]
+DefaultAssay(alldata.1) = "RNA"
+expr_data <- FetchData(alldata.1, vars = genes_of_interest, layer = "data")
+
+# Combine expression + metadata
+expr_with_meta <- cbind(meta_data, expr_data)
+
+# Calculate average expression per gene per sample
+avg_expr_per_sample <- expr_with_meta %>%
+  group_by(orig.ident, timepoint) %>%
+  summarise(across(all_of(genes_of_interest), mean), .groups = "drop") %>%
+  pivot_longer(cols = all_of(genes_of_interest), names_to = "Gene", values_to = "AvgExpression")
+
+
+# Set factor levels for timepoint (optional but good practice)
+avg_expr_per_sample$timepoint <- factor(avg_expr_per_sample$timepoint,
+                                        levels = c("UW", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW"))
+
+# Plot
+g <- ggplot(avg_expr_per_sample, aes(x = timepoint, y = AvgExpression)) +
+  geom_boxplot(outlier.shape = NA, fill = "grey90", color = "black") +
+  geom_jitter(aes(color = timepoint), width = 0.2, size = 2, alpha = 0.8) +
+  facet_wrap(~Gene, scales = "free_y", ncol = 3) +
+  stat_compare_means(
+    method = "wilcox.test",
+    comparisons = list(
+      c("UW", "D4PW"), c("UW", "D7PW"), c("UW", "D15PW"), c("UW", "D30PW")
+    ),
+    label = "p.signif",
+    label.y.npc = "top",
+    size = 4
+  ) +
+  labs(title = "Average Gene Expression Per Sample by Timepoint",
+       x = "Timepoint",
+       y = "Avg. Expression (RNA)",
+       color = "Timepoint") +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    strip.text = element_text(face = "bold", size = 14),
+    legend.position = "none",
+    panel.grid.major = element_line(color = "grey85")
+  )
+
+```
+
+
+```{r}
+# Step 1: Get UW averages for each gene
+uw_means <- avg_expr_per_sample %>%
+  filter(timepoint == "UW") %>%
+  group_by(Gene) %>%
+  summarise(UW_Mean = mean(AvgExpression), .groups = "drop")
+
+# Step 2: Join back to original dataframe and calculate difference
+avg_expr_delta <- avg_expr_per_sample %>%
+  left_join(uw_means, by = "Gene") %>%
+  mutate(ExpressionDelta = AvgExpression - UW_Mean)
+
+g <- ggplot(avg_expr_delta, aes(x = timepoint, y = ExpressionDelta)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_boxplot(outlier.shape = NA, fill = "grey90", color = "black") +
+  geom_jitter(aes(color = timepoint), width = 0.2, size = 2, alpha = 0.8) +
+  facet_wrap(~Gene, scales = "free_y", ncol = 3) +
+  stat_compare_means(
+    method = "wilcox.test",
+    comparisons = list(
+      c("UW", "D4PW"), c("UW", "D7PW"), c("UW", "D15PW"), c("UW", "D30PW")
+    ),
+    label = "p.signif",
+    label.y.npc = "top",
+    size = 4
+  ) +
+  labs(title = "Change in Gene Expression Relative to UW",
+       x = "Timepoint",
+       y = "Δ Expression (Sample Avg. - UW Mean)",
+       color = "Timepoint") +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    strip.text = element_text(face = "bold", size = 14),
+    legend.position = "none",
+    panel.grid.major = element_line(color = "grey85")
+  )
+
+
+```
+
+```{r}
+genes_of_interest <- c("Krt16", "Krt6a", "Krt14", "Krt10", "Krt1", "Cdh13", "Sox6", "Sema3c", "Sema5a")
+
+# Get metadata (just timepoint and sample)
+cell_meta <- alldata.1@meta.data[, c("timepoint", "orig.ident")]
+expr_data <- FetchData(alldata.1, vars = genes_of_interest)
+
+# Combine
+expr_long <- cbind(cell_meta, expr_data) %>%
+  pivot_longer(cols = all_of(genes_of_interest), names_to = "Gene", values_to = "Expression") %>%
+  mutate(timepoint = factor(timepoint, levels = c("UW", "D1PW", "D2PW", "D4PW", "D7PW", "D15PW", "D30PW")))
+
+
+library(ggplot2)
+library(ggpubr)
+
+library(ggplot2)
+library(ggpubr)
+
+g <- ggplot(expr_long, aes(x = timepoint, y = Expression)) +
+  geom_violin(
+    aes(fill = timepoint),
+    color = "black",
+    scale = "width",
+    trim = TRUE,
+    alpha = 0.9
+  ) +
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.5,
+    color = "black",
+    fatten = 1.5
+  ) +
+  facet_wrap(~ Gene, scales = "free_y", ncol = 3) +
+  stat_compare_means(
+    method = "wilcox.test",
+    comparisons = list(
+      c("UW", "D4PW"), c("UW", "D7PW"), c("UW", "D15PW"), c("UW", "D30PW")
+    ),
+    label = "p.signif",
+    label.y.npc = "top",
+    p.adjust.method = "BH",
+    hide.ns = TRUE,
+    size = 4,
+    fontface = "bold"  # Bold the ** symbols
+  ) +
+  labs(
+    title = "Per-Cell Gene Expression by Timepoint",
+    x = "Timepoint",
+    y = "Expression (log-normalized)"
+  ) +
+  theme_ggprism_mod(base_size = 14) +
+  theme(
+    strip.text = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    panel.grid = element_blank(),  # remove all grid lines
+    legend.position = "none"
+  )
+
+ggsave(
+  filename = "PerCell_GeneExpression_ViolinPlot.pdf",
+  plot = g,
+  width = 14,
+  height = 10
+)
+
+alldata.1 = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Jonathan Current Analysis/Mean Expression Box Plots/HumanLiuandDiabeticDatasetsKeratinocytes.rds")
+
+
+
+
+```
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(ggpubr)
+library(scCustomize)
+
+# Set gene of interest
+genes_of_interest <- c("SEMA5A")
+
+# Extract metadata and expression data
+cell_meta <- alldata.1@meta.data[, c("group_cond", "orig.ident")]
+expr_data <- FetchData(alldata.1, vars = genes_of_interest)
+
+# Combine and reshape
+expr_long <- cbind(cell_meta, expr_data) %>%
+  pivot_longer(cols = all_of(genes_of_interest), names_to = "Gene", values_to = "Expression") %>%
+  mutate(group_cond = factor(group_cond, levels = c("Unwounded", "D1PW", "D7PW", "D30PW", "UWO_CTRL","NH_DFU", "H_DFU", "Diab_CTRL")))
+
+# Define comparisons of interest
+comparisons_list <- list(
+  c("Unwounded", "D1PW"),
+  c("Unwounded", "D7PW"),
+  c("Unwounded", "D30PW"),
+  c("UWO_CTRL", "NH_DFU"),
+  c("UWO_CTRL", "H_DFU"),
+  c("UWO_CTRL", "Diab_CTRL")
+)
+
+# Make violin plot
+g <- ggplot(expr_long, aes(x = group_cond, y = Expression)) +
+  geom_violin(
+    aes(fill = group_cond),
+    color = "black",
+    scale = "width",
+    trim = TRUE,
+    alpha = 0.9
+  ) +
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.5,
+    color = "black",
+    fatten = 1.5
+  ) +
+  stat_compare_means(
+    method = "wilcox.test",
+    comparisons = comparisons_list,
+    label = "p.signif",
+    label.y.npc = "top",
+    p.adjust.method = "BH",
+    hide.ns = TRUE,
+    size = 4,
+    fontface = "bold"
+  ) +
+  facet_wrap(~ Gene, scales = "free_y", ncol = 1) +
+  labs(
+    title = "SEMA5A Expression Across Conditions",
+    x = "Condition",
+    y = "Average Expression"
+  ) +
+  theme_ggprism_mod(base_size = 14) +
+  theme(
+    strip.text = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 0.8,vjust = 0.8, face = "bold"),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+# Save to file
+ggsave(
+  filename = "SEMA5A_ViolinPlot_ByGroupCond.png",
+  plot = g,
+  width = 6,
+  height = 5
+)
+
+```
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(ggpubr)
+library(scCustomize)
+
+# Set genes of interest
+genes_of_interest <- c("SEMA3C", "VEGFA")  # Replace with your desired two genes
+
+# Extract metadata and expression data
+cell_meta <- alldata.1@meta.data[, c("group_cond", "orig.ident")]
+expr_data <- FetchData(alldata.1, vars = genes_of_interest)
+
+# Combine and reshape
+expr_long <- cbind(cell_meta, expr_data) %>%
+  pivot_longer(
+    cols = all_of(genes_of_interest),
+    names_to = "Gene",
+    values_to = "Expression"
+  ) %>%
+  mutate(group_cond = factor(group_cond, levels = c("Unwounded", "D1PW", "D7PW", "D30PW", "UWO_CTRL", "NH_DFU", "H_DFU", "Diab_CTRL")))
+
+# Define comparisons of interest
+comparisons_list <- list(
+  c("Unwounded", "D1PW"),
+  c("Unwounded", "D7PW"),
+  c("Unwounded", "D30PW"),
+  c("UWO_CTRL", "NH_DFU"),
+  c("UWO_CTRL", "H_DFU"),
+  c("UWO_CTRL", "Diab_CTRL")
+)
+
+# Generate the plot
+g <- ggplot(expr_long, aes(x = group_cond, y = Expression)) +
+  geom_violin(
+    aes(fill = group_cond),
+    color = "black",
+    scale = "width",
+    trim = T,
+    alpha = 0.8
+  ) +
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.5,
+    color = "black",
+    fatten = 1.5
+  ) +
+  stat_compare_means(
+    method = "wilcox.test",
+    comparisons = comparisons_list,
+    label = "p.signif",
+    label.y.npc = "top",
+    p.adjust.method = "BH",
+    hide.ns = TRUE,
+    size = 4,
+    fontface = "bold"
+  ) +
+  facet_wrap(~ Gene, scales = "free_y", ncol = 1) +
+  labs(
+    title = "Expression Across Conditions",
+    x = "Condition",
+    y = "Average Expression"
+  ) +
+  theme_ggprism_mod(base_size = 14) +
+  theme(
+    strip.text = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 0.8, vjust = 0.8, face = "bold"),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+# Save the plot
+ggsave(
+  filename = "SEMAVEGF_Genes_ViolinPlot_ByGroupCond.png",
+  plot = g,
+  width = 7,
+  height = 8
+)
+```
+
+
+```{r}
+alldata.1 = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Jonathan/Single-Cell RNA seq/Diabetic Ulcer Data/TheocharidisHumanFootDibaeticData_Labeled2025-07-14.rds")
+
+
+alldata.2 = readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/scRNA SEQ of wounds/Jonathan/Single-Cell RNA seq/Liu 2024/LiuHumanData_Labeled2025-01-24.rds")
+
+```
+
+```{r}
+
+# Update alldata.1
+alldata.1$cond_dfu_abbrev <- dplyr::recode(
+  alldata.1$condition,
+  "NonHealing_DFU_DFU"   = "NH_DFU",
+  "Healing_DFU_DFU"      = "H_DFU",
+  "Diabetic_NoDFU_UWO"   = "Diab_CTRL",
+  "Healthy_Control_UWO"  = "UWO_CTRL"
+)
+
+# For alldata.2: create a 'cond_dfu' column using timepoint
+alldata.2$cond_dfu_abbrev <- alldata.2$timepoint  # if you want to match column name structure
+
+unique(alldata.2$cond_dfu_abbrev)
+```
+
+
+```{r}
+#Subset the Identaties that You Need
+alldata.1 <- subset(alldata.1, ident = "Keratinocytes")
+alldata.2 <- subset(alldata.2, ident = "Keratinocytes")
+```
+
+
+```{r}
+library(Seurat)
+library(future)
+options(future.globals.maxSize = 30 * 1024^3)
+  # or "multicore" on Unix systems
+
+# Remove residuals and scale.data from SCT assay if they exist
+alldata.1@assays$SCT@misc$residuals <- NULL
+alldata.2@assays$SCT@misc$residuals <- NULL
+alldata.1@assays$SCT@scale.data <- matrix()
+alldata.2@assays$SCT@scale.data <- matrix()
+
+# Merge the datasets
+combined <- merge(alldata.1, y = alldata.2, add.cell.ids = c("DFU", "Wound"))
+
+# Join layers so SCTransform can be run per layer (orig.ident)
+combined <- JoinLayers(combined)
+
+# Split the RNA assay by layer (e.g., dataset of origin)
+combined[["RNA"]] <- split(combined[["RNA"]], f = combined$orig.ident)
+
+# Run SCTransform across layers
+combined <- SCTransform(combined, verbose = TRUE)
+
+# Optional: PCA and clustering if you're ready to proceed
+combined <- combined %>%
+  RunPCA(verbose = FALSE)
+
+pcs <- npcs(combined)
+
+combined <- combined %>%
+  FindNeighbors(reduction = "pca", dims = 1:pcs) %>%
+  FindClusters(resolution = 1.5, cluster.name = "pca_clusters") %>%
+  RunUMAP(reduction = "pca", dims = 1:pcs, reduction.name = "umap.pca")
+
+# Save result
+saveRDS(combined, "HumanLiuandDiabeticFootUlcer_KeratincoytesCells_SCT_JoinedLayers.rds")
+```
+
+
+```{r}
+library(Seurat)
+library(tidyverse)
+library(ggpubr)
+library(scCustomize)
+
+library(dplyr)
+library(forcats)
+
+combined@meta.data <- combined@meta.data %>%
+  mutate(
+    cond_dfu_abbrev = recode(
+      cond_dfu_abbrev,
+      "Unwounded"       = "Unwounded",
+      "D1PW"            = "D1PW",
+      "D7PW"            = "D7PW",
+      "D30PW"           = "D30PW",
+      "Healthy_Control" = "UWO_CTRL",
+      "NonHealing_DFU"  = "NH_DFU",
+      "Healing_DFU"     = "H_DFU",
+      "Diabetic_NoDFU"  = "Diab_CTRL"
+    ),
+    cond_dfu_abbrev = factor(
+      cond_dfu_abbrev,
+      levels = c("UWO_CTRL", "Diab_CTRL", "H_DFU", "NH_DFU","Unwounded", "D1PW", "D7PW", "D30PW")
+    )
+  )
+
+
+# Genes of interest
+genes_of_interest <- c("SEMA3C","SOX6")
+
+# Extract metadata and expression
+cell_meta <- combined@meta.data[, c("cond_dfu_abbrev", "orig.ident")]
+expr_data <- FetchData(combined, vars = genes_of_interest)
+
+# Combine and reshape
+expr_long <- cbind(cell_meta, expr_data) %>%
+  pivot_longer(
+    cols = all_of(genes_of_interest),
+    names_to = "Gene",
+    values_to = "Expression"
+  ) %>%
+  mutate(group_cond = factor(cond_dfu_abbrev, levels = c(
+    "Unwounded", "D1PW", "D7PW", "D30PW", "UWO_CTRL", "NH_DFU", "H_DFU", "Diab_CTRL"
+  )))
+
+# Define comparisons of interest
+comparisons_list <- list(
+  c("Unwounded", "D1PW"),
+  c("Unwounded", "D7PW"),
+  c("Unwounded", "D30PW"),
+  c("UWO_CTRL", "NH_DFU"),
+  c("UWO_CTRL", "H_DFU"),
+  c("UWO_CTRL", "Diab_CTRL")
+)
+
+
+g <- ggplot(expr_long, aes(x = group_cond, y = Expression)) +
+  geom_violin(
+    aes(fill = group_cond),
+    color = "black",
+    scale = "width",
+    trim = TRUE,
+    alpha = 0.8
+  ) +
+  stat_summary(
+    fun = mean,
+    geom = "crossbar",
+    width = 0.5,
+    color = "black",
+    fatten = 1.5
+  ) +
+  stat_compare_means(
+    method = "wilcox.test",
+    comparisons = comparisons_list,
+    label = "p.signif",
+    label.y.npc = "top",
+    p.adjust.method = "BH",
+    hide.ns = TRUE,
+    size = 4,
+    fontface = "bold"
+  ) +
+  facet_wrap(~ Gene, scales = "free_y", ncol = 2) +  # << Changed from ncol = 1 to 2
+  labs(
+    title = "Expression Across Conditions",
+    x = "Condition",
+    y = "Average Expression"
+  ) +
+  theme_ggprism_mod(base_size = 14) +
+  theme(
+    strip.text = element_text(face = "bold", size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 0.8, vjust = 0.8, face = "bold"),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  )
+
+# Save the plot
+ggsave(
+  filename = "SEMA3CSox6_Genes_ViolinPlot_ByGroupCond_KeratinocytesOnly.png",
+  plot = g,
+  width = 10,     # Optionally increased width to accommodate two columns
+  height = 8
+)
+```
+

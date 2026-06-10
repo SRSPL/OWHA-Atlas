@@ -1,0 +1,1448 @@
+---
+title: "Analysis of Human Spatial Data"
+author: "Simon Van Deursen"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Set default directory for all chunks
+knitr::opts_knit$set(root.dir = "~/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Shared Data/Spatial Data/Liu et al. Human Spatial Data")
+
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+library(viridis)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(SeuratWrappers)
+library(hdf5r)
+library(sfarrow)
+
+# needs to be set for large dataset analysis
+options(future.globals.maxSize = 1e9)
+
+#Save a custom theme for ggplots, including setting Arial as default font and
+#making background transparent
+custom_theme <- theme(
+  text = element_text(family = "Arial", face = "bold"),
+  plot.background = element_rect(fill = "transparent", color = NA),
+  panel.background = element_rect(fill = "transparent", color = NA),
+  legend.background = element_rect(fill = "transparent")
+)
+```
+
+```{r}
+spatial_human <- readRDS("/Users/jchincheong/SRSP Laboratory Dropbox/SRSP Lab/Resources/Town Square - Data Share/Manuscripts/Wound Healing Atlas Paper/Hair Follicle Paper/Shared Data/Spatial Data/Liu et al. Human Spatial Data/LiuHumanAtlas_STData_052325.rds")
+```
+
+
+```{r}
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+
+# === PARAMETERS ===
+celltype_name <- "BasalIV"
+genes_of_interest <- c("CDH13", "NFIA", "MEF2A", "TP63", "FGFR2", "SLC24A3","SEMA3C","KRT14")  # Human homologs
+genes_of_interest <- c("KIF15", "CENPE", "TPX2", "ANLN", "KNL1", "KIF20B", "ECT2", "TOP2A", "MKI67", "IGFBP3", "PECAM1","CDH5")
+max_value <- 0.8
+score_name <- paste0(celltype_name, "_Score")
+image_region <- "slice1"  # update as per your image slot name
+pt_size <- 2.5
+
+for (sample_name in names(spatial_human)) {
+  obj <- spatial_human[[sample_name]]
+  present_genes <- genes_of_interest[genes_of_interest %in% rownames(obj)]
+  cat(sample_name, "has", length(present_genes), "of", length(genes_of_interest), "genes present.\n")
+}
+
+
+
+for (sample_name in names(spatial_human)) {
+  obj <- spatial_human[[sample_name]]
+  
+  # Just add module score, assuming data is normalized
+  obj <- AddModuleScore(obj,
+                        features = list(genes_of_interest),
+                        name = score_name,
+                        assay = "SCT", 
+                        nbin = 10)
+  
+  spatial_human[[sample_name]] <- obj
+}
+
+# Assuming these parameters are already defined:
+# celltype_name, genes_of_interest, score_name, max_value, image_region, pt_size
+
+score_column <- paste0(score_name, "1")
+
+# Function to plot spatial scores for a given Seurat object with label
+plot_spatial_score <- function(obj, label) {
+  SpatialFeaturePlot(
+    obj,
+    features = score_column,
+    images = image_region,
+    pt.size.factor = pt_size * 2,
+    min.cutoff = 0,
+    max.cutoff = max_value
+  ) + ggtitle(label) +
+    theme_minimal() +
+    theme(panel.grid = element_blank(), plot.title = element_text(hjust = 0.5))
+}
+
+# List of sample names grouped by your desired "timepoints"
+# (You will need to adjust these vectors based on your sample naming and grouping)
+samples_d0 <- c("P20063_109", "P17401_1001","P20063_101","P20063_105")  # example samples for D0
+samples_d3 <- c("P20063_110", "P17401_1002","P20063_102","P20063_106")  # example samples for D3
+samples_d7 <- c("P20063_111", "P17401_1003","P20063_103","P20063_107") # example samples for D7
+samples_d30 <- c("P20063_112", "P17401_1004","P20063_104","P20063_108") # example samples for D30
+
+# Helper function to generate plots for a group of samples and combine them
+plot_and_combine_group <- function(sample_names, group_label) {
+  plots <- list()
+  for (sample in sample_names) {
+    obj <- spatial_human[[sample]]
+    p <- plot_spatial_score(obj, paste(celltype_name, "-", group_label, sample))
+    plots[[sample]] <- p
+  }
+  combined <- wrap_plots(plots, ncol = 2)
+  
+  dir.create("human_spatial_module_score_plots", showWarnings = FALSE)
+  ggsave(
+    filename = paste0("human_spatial_module_score_plots/", score_name, "_", group_label, "_combinedBiggerDotSize.png"),
+    plot = combined,
+    width = 14, height = 10, dpi = 320
+  )
+  return(combined)
+}
+
+# Generate combined plots for each timepoint group
+combined_d0 <- plot_and_combine_group(samples_d0, "D0")
+combined_d3 <- plot_and_combine_group(samples_d3, "D1")
+combined_d7 <- plot_and_combine_group(samples_d7, "D7")
+combined_d30 <- plot_and_combine_group(samples_d30, "D30")
+
+# Optionally, combine all timepoints into one big plot
+all_combined <- (combined_d0 | combined_d3) / (combined_d7 | combined_d30)
+ggsave(
+  filename = paste0("human_spatial_module_score_plots/", score_name, "_all_timepoints_combinedBiggerDotSize.png"),
+  plot = all_combined,
+  width = 16, height = 14, dpi = 320
+)
+
+
+```
+
+
+```{r}
+# Define your endothelial markers
+
+
+human_endothelial_markers <- c("KRT14")
+pt_size <- 2.5
+
+library(Seurat)
+library(ggplot2)
+library(patchwork)  # for combining plots
+
+# Define output directory
+output_dir <- "SpatialFeaturePlots"
+dir.create(output_dir, showWarnings = FALSE)
+
+# Get condition (timepoint) for each sample
+sample_conditions <- sapply(spatial_human, function(obj) unique(obj$Condition))
+samples_by_condition <- split(names(spatial_human), sample_conditions)
+
+# Helper function to generate plots for a group of samples for one gene
+plot_and_combine_group <- function(sample_names, group_label, gene) {
+  plots <- list()
+  for (sample in sample_names) {
+    obj <- spatial_human[[sample]]
+    if (gene %in% rownames(obj)) {
+      p <- SpatialFeaturePlot(
+        obj,
+        features = gene,
+        pt.size.factor = pt_size *1.5
+      ) +
+        ggtitle(paste0(sample)) +
+        theme(plot.title = element_text(size = 12, face = "bold"))
+      plots[[sample]] <- p
+    }
+  }
+  if (length(plots) > 0) {
+    combined <- wrap_plots(plots, ncol = 2)
+    dir.create("SpatialFeaturePlots", showWarnings = FALSE)
+    ggsave(
+      filename = paste0("SpatialFeaturePlots/", gene, "_", group_label, "_combined.png"),
+      plot = combined,
+      width = 14, height = 10, dpi = 320
+    )
+    return(combined)
+  } else {
+    return(NULL)
+  }
+}
+
+# Loop through each gene and make per-timepoint + all-timepoint plots
+for (gene in human_endothelial_markers) {
+  
+  # Store per-timepoint plots
+  timepoint_plots <- list()
+  
+  for (condition in names(samples_by_condition)) {
+    combined_plot <- plot_and_combine_group(samples_by_condition[[condition]], condition, gene)
+    if (!is.null(combined_plot)) {
+      timepoint_plots[[condition]] <- combined_plot
+    }
+  }
+  
+  # Combine all timepoints into one big patchwork layout (if at least one exists)
+  if (length(timepoint_plots) > 0) {
+    # Arrange in a nice grid (2x2 if 4 timepoints)
+    all_combined <- wrap_plots(timepoint_plots, ncol = 2) +
+      plot_annotation(
+        title = paste0("Gene: ", gene, " | All Timepoints"),
+        theme = theme(plot.title = element_text(size = 18, face = "bold"))
+      )
+    
+    ggsave(
+      filename = paste0("SpatialFeaturePlots/", gene, "_all_timepoints_combined.png"),
+      plot = all_combined,
+      width = 16, height = 14, dpi = 320
+    )
+  }
+}
+
+```
+```{r Quantification of SEma3c Expression}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(khroma)
+
+# Define timepoint groups
+samples_d0 <- c("P20063_109", "P17401_1001", "P20063_101", "P20063_105")
+samples_d1 <- c("P20063_110", "P17401_1002", "P20063_102", "P20063_106")
+samples_d7 <- c("P20063_111", "P17401_1003", "P20063_103", "P20063_107")
+samples_d30 <- c("P20063_112", "P17401_1004", "P20063_104", "P20063_108")
+
+# Map samples to timepoints with correct lengths and factor levels for ordering
+sample_timepoint_map <- data.frame(
+  sample = c(samples_d0, samples_d1, samples_d7, samples_d30),
+  timepoint = factor(
+    c(
+      rep("D0", length(samples_d0)),
+      rep("D1", length(samples_d1)),
+      rep("D7", length(samples_d7)),
+      rep("D30", length(samples_d30))
+    ),
+    levels = c("D0", "D1", "D7", "D30")  # Set desired order here
+  )
+)
+
+# Extract SEMA3C expression from SCT assay for each sample
+expr_data <- lapply(names(spatial_human), function(sample_name) {
+  if (sample_name %in% sample_timepoint_map$sample) {
+    obj <- spatial_human[[sample_name]]
+    DefaultAssay(obj) <- "SCT"
+    if ("SEMA3C" %in% rownames(obj)) {
+      data.frame(
+        sample = sample_name,
+        expression = FetchData(obj, vars = "SEMA3C")[, 1]
+      )
+    } else {
+      NULL
+    }
+  }
+}) %>% bind_rows()
+
+# Add timepoint labels
+expr_data <- left_join(expr_data, sample_timepoint_map, by = "sample")
+
+# Generate the palette and assign names
+timepoint_colors <- color("nightfall")(4)[1:4]
+names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+# Create violin plot with Wilcoxon test comparing to D0
+p <- ggplot(expr_data, aes(x = timepoint, y = expression, fill = timepoint)) +
+  geom_violin(trim = FALSE) +
+  geom_boxplot(width = 0.15, outlier.size = 0.5, fill = "white") +
+  stat_compare_means(
+    method = "wilcox.test",
+    label = "p.signif",
+    ref.group = "D0"
+  ) +
+  theme_classic(base_size = 14) +  # You can swap theme_ggprism_mod if defined
+  ylab("SEMA3C Expression (SCT)") +
+  xlab("Timepoint") +
+  ggtitle("SEMA3C Expression Across Timepoints Human Spatial") +
+  scale_fill_manual(values = timepoint_colors)
+
+print(p)
+
+ggsave("MeanSEMA3CVlnPlotExpressionSpatial.png", height =4, width = 4)
+```
+```{r}
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+library(khroma)
+
+# Your sample groups (same as before)
+samples_d0 <- c("P20063_109", "P17401_1001", "P20063_101", "P20063_105")
+samples_d1 <- c("P20063_110", "P17401_1002", "P20063_102", "P20063_106")
+samples_d7 <- c("P20063_111", "P17401_1003", "P20063_103", "P20063_107")
+samples_d30 <- c("P20063_112", "P17401_1004", "P20063_104", "P20063_108")
+
+sample_timepoint_map <- data.frame(
+  sample = c(samples_d0, samples_d1, samples_d7, samples_d30),
+  timepoint = factor(
+    c(
+      rep("D0", length(samples_d0)),
+      rep("D1", length(samples_d1)),
+      rep("D7", length(samples_d7)),
+      rep("D30", length(samples_d30))
+    ),
+    levels = c("D0", "D1", "D7", "D30")
+  )
+)
+
+
+
+# Extract SEMA3C expression only in spots with KRT14 > 0
+expr_data_krt14 <- lapply(names(spatial_human), function(sample_name) {
+  if (sample_name %in% sample_timepoint_map$sample) {
+    obj <- spatial_human[[sample_name]]
+    DefaultAssay(obj) <- "SCT"
+    
+    # Check genes present
+    genes_present <- rownames(obj)
+    if (all(c("SEMA3C", "KRT5") %in% genes_present)) {
+      data_mat <- FetchData(obj, vars = c("SEMA3C", "KRT5"))
+      data_mat_filtered <- data_mat[data_mat$KRT5 > 2, ]  # only spots with KRT14 > 0
+      
+      data.frame(
+        sample = sample_name,
+        expression = data_mat_filtered$SEMA3C
+      )
+    } else {
+      NULL
+    }
+  }
+}) %>% bind_rows()
+
+# Add timepoint labels
+expr_data_krt14 <- left_join(expr_data_krt14, sample_timepoint_map, by = "sample")
+
+# Set up color palette again
+timepoint_colors <- color("nightfall")(4)[1:4]
+names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+# Plot violin plot with stats comparing to D0
+p_krt14 <- ggplot(expr_data_krt14, aes(x = timepoint, y = expression, fill = timepoint)) +
+  geom_violin(trim = FALSE) +
+  geom_boxplot(width = 0.15, outlier.size = 0.5, fill = "white") +
+  stat_compare_means(
+    method = "wilcox.test",
+    label = "p.signif",
+    ref.group = "D0"
+  ) +
+  theme_ggprism_mod(base_size = 14) +
+  ylab("SEMA3C Expression in KRT14+ Spots (SCT)") +
+  xlab("Timepoint") +
+  ggtitle("SEMA3C Expression in Epidermal Spots Across Timepoints vs D0") +
+  scale_fill_manual(values = timepoint_colors)
+
+print(p_krt14)
+
+ggsave("MeanSEMA3CVlnPlotExpressionSpatialKrt5.png", height =4, width = 4)
+
+
+```
+```{r}
+library(ggplot2)
+library(ggpubr)
+library(khroma)
+library(dplyr)
+
+# (Assuming sample_means and sample_timepoint_map are already created as before)
+
+# Palette
+timepoint_colors <- color("nightfall")(4)[1:4]
+names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+# Define comparisons vs D0
+comparisons <- list(c("D1", "D0"), c("D7", "D0"), c("D30", "D0"))
+
+# Plot bars + sample dots + simple Wilcoxon with stars or "ns"
+p_bar <- ggplot(sample_means, aes(x = timepoint, y = mean_expression, fill = timepoint)) +
+  stat_summary(fun = mean, geom = "bar", color = "black", width = 0.7) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  geom_jitter(width = 0.15, size = 2, color = "black") +
+  scale_fill_manual(values = timepoint_colors) +
+  ylab("Mean SEMA3C Expression (SCT)") +
+  xlab("Timepoint") +
+  ggtitle("") +
+  theme_ggprism_mod(base_size = 14) +
+  stat_compare_means(
+    comparisons = comparisons,
+    method = "wilcox.test",
+    label = "p.signif",
+    ref.group = "D0"
+  )
+
+print(p_bar)
+
+ggsave("MeanSEMA3CBarPlotExpressionSpatial.png", height =4, width = 4)
+
+```
+
+```{r}
+library(dplyr)
+
+sample_means_krt14 <- lapply(names(spatial_human), function(sample_name) {
+  if (sample_name %in% sample_timepoint_map$sample) {
+    obj <- spatial_human[[sample_name]]
+    DefaultAssay(obj) <- "SCT"
+    
+    # Check if both genes exist
+    if (all(c("SEMA3C", "KRT5") %in% rownames(obj))) {
+      krt14_expr <- FetchData(obj, vars = "KRT5")[,1]
+      sema3c_expr <- FetchData(obj, vars = "SEMA3C")[,1]
+      
+      # Define KRT14+ spots
+      krt14_pos_spots <- which(krt14_expr > 2)
+      
+      if(length(krt14_pos_spots) > 0){
+        mean_sema3c_krt14pos <- mean(sema3c_expr[krt14_pos_spots])
+      } else {
+        mean_sema3c_krt14pos <- NA
+      }
+      
+      data.frame(
+        sample = sample_name,
+        mean_SEMA3C_KRT14pos = mean_sema3c_krt14pos
+      )
+    } else {
+      NULL
+    }
+  }
+}) %>% bind_rows()
+
+# Join with timepoint info
+sample_means_krt14 <- left_join(sample_means_krt14, sample_timepoint_map, by = "sample")
+
+# Check output
+head(sample_means_krt14)
+
+# Plot bars + sample dots + Wilcoxon with stars or ns for KRT14+ spots
+p_bar_krt14 <- ggplot(sample_means_krt14, aes(x = timepoint, y = mean_SEMA3C_KRT14pos, fill = timepoint)) +
+  stat_summary(fun = mean, geom = "bar", color = "black", width = 0.7) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  geom_jitter(width = 0.15, size = 3, color = "black") +
+  scale_fill_manual(values = timepoint_colors) +
+  ylab("Mean SEMA3C Expression in KRT14+ Spots (SCT)") +
+  xlab("Timepoint") +
+  ggtitle("Mean SEMA3C Expression per Timepoint in KRT14+ Spots") +
+  theme_ggprism_mod(base_size = 14) +
+  stat_compare_means(
+    comparisons = comparisons,
+    method = "wilcox.test",
+    label = "p.signif",
+    ref.group = "D0"
+  )
+
+print(p_bar_krt14)
+
+ggsave("MeanSEMA3CBarPlotExpressionSpatialonlyKrt5ExpressingCells.png", height =4, width = 4)
+
+```
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(khroma)
+
+# Define sample groups
+samples_d0 <- c("P20063_109", "P17401_1001", "P20063_101", "P20063_105")
+samples_d1 <- c("P20063_110", "P17401_1002", "P20063_102", "P20063_106")
+samples_d7 <- c("P20063_111", "P17401_1003", "P20063_103", "P20063_107")
+samples_d30 <- c("P20063_112", "P17401_1004", "P20063_104", "P20063_108")
+
+sample_timepoint_map <- data.frame(
+  sample = c(samples_d0, samples_d1, samples_d7, samples_d30),
+  timepoint = factor(
+    c(
+      rep("D0", length(samples_d0)),
+      rep("D1", length(samples_d1)),
+      rep("D7", length(samples_d7)),
+      rep("D30", length(samples_d30))
+    ),
+    levels = c("D0", "D1", "D7", "D30")
+  )
+)
+
+# -----------------------------
+# Extract raw SEMA3C expression + region info
+# -----------------------------
+expr_data_region <- lapply(names(spatial_human), function(sample_name) {
+  if (sample_name %in% sample_timepoint_map$sample) {
+    obj <- spatial_human[[sample_name]]
+    DefaultAssay(obj) <- "SCT"
+
+    if ("SEMA3C" %in% rownames(obj) && "AnnoType" %in% colnames(obj@meta.data)) {
+      data_mat <- FetchData(obj, vars = c("SEMA3C", "AnnoType"))
+      data.frame(
+        sample = sample_name,
+        expression = data_mat$SEMA3C,
+        region = data_mat$AnnoType
+      )
+    } else {
+      NULL
+    }
+  }
+}) %>% bind_rows()
+
+# Add timepoint info
+expr_data_region <- left_join(expr_data_region, sample_timepoint_map, by = "sample")
+
+# -----------------------------
+# Plot: Grouped violins by timepoint & region
+# -----------------------------
+timepoint_colors <- color("nightfall")(4)[1:4]
+names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+p_region <- ggplot(expr_data_region, aes(x = region, y = expression, fill = timepoint)) +
+  geom_violin(trim = FALSE, scale = "width", alpha = 0.7) +
+  geom_boxplot(width = 0.15, position = position_dodge(width = 0.9), outlier.size = 0.3, fill = "white") +
+  stat_compare_means(
+    aes(group = timepoint),
+    method = "wilcox.test",
+    label = "p.signif",
+    ref.group = "D0"
+  ) +
+  scale_fill_manual(values = timepoint_colors) +
+  theme_ggprism_mod(base_size = 14) +
+  xlab("Region (AnnoType)") +
+  ylab("SEMA3C Expression (SCT)") +
+  ggtitle("SEMA3C Expression Across Annotated Regions and Timepoints") +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+print(p_region)
+
+ggsave("SEMA3C_Expression_By_Region_Timepoint.png", height = 5, width = 6, dpi = 300)
+
+```
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(khroma)
+
+# ==============================
+# Define sample groups
+# ==============================
+samples_d0 <- c("P20063_109", "P17401_1001", "P20063_101", "P20063_105")
+samples_d1 <- c("P20063_110", "P17401_1002", "P20063_102", "P20063_106")
+samples_d7 <- c("P20063_111", "P17401_1003", "P20063_103", "P20063_107")
+samples_d30 <- c("P20063_112", "P17401_1004", "P20063_104", "P20063_108")
+
+sample_timepoint_map <- data.frame(
+  sample = c(samples_d0, samples_d1, samples_d7, samples_d30),
+  timepoint = factor(
+    c(
+      rep("D0", length(samples_d0)),
+      rep("D1", length(samples_d1)),
+      rep("D7", length(samples_d7)),
+      rep("D30", length(samples_d30))
+    ),
+    levels = c("D0", "D1", "D7", "D30")
+  )
+)
+
+# ==============================
+# Extract raw SEMA3C expression + region info
+# ==============================
+expr_data_region <- lapply(names(spatial_human), function(sample_name) {
+  if (sample_name %in% sample_timepoint_map$sample) {
+    obj <- spatial_human[[sample_name]]
+    DefaultAssay(obj) <- "SCT"
+    
+    if ("SEMA3C" %in% rownames(obj) && "AnnoType" %in% colnames(obj@meta.data)) {
+      data_mat <- FetchData(obj, vars = c("SEMA3C", "AnnoType"))
+      data.frame(
+        sample = sample_name,
+        expression = data_mat$SEMA3C,
+        region = data_mat$AnnoType
+      )
+    } else {
+      NULL
+    }
+  }
+}) %>% bind_rows()
+
+# Add timepoint info
+expr_data_region <- left_join(expr_data_region, sample_timepoint_map, by = "sample")
+
+# ==============================
+# Calculate mean expression per region, timepoint, and sample
+# ==============================
+sample_means <- expr_data_region %>%
+  group_by(timepoint, region, sample) %>%
+  summarise(mean_expression = mean(expression, na.rm = TRUE), .groups = "drop")
+
+# ==============================
+# Calculate overall mean and SEM per region & timepoint
+# ==============================
+mean_expr <- sample_means %>%
+  group_by(timepoint, region) %>%
+  summarise(
+    mean_expression = mean(mean_expression, na.rm = TRUE),
+    sem = sd(mean_expression, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# ==============================
+# Plot: Bar plot (mean ± SEM) + sample points
+# ==============================
+timepoint_colors <- color("nightfall")(4)[1:4]
+names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+p_bar <- ggplot(mean_expr, aes(x = region, y = mean_expression, fill = timepoint)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9),
+           color = "black", width = 0.8) +
+  geom_errorbar(aes(ymin = mean_expression - sem, ymax = mean_expression + sem),
+                position = position_dodge(width = 0.9), width = 0.3, linewidth = 0.7) +
+  geom_point(
+    data = sample_means,
+    aes(x = region, y = mean_expression, color = timepoint),
+    position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.9),
+    size = 1.2, alpha = 0.8
+  ) +
+  scale_fill_manual(values = timepoint_colors) +
+  scale_color_manual(values = timepoint_colors) +
+  theme_classic(base_size = 14) +
+  xlab("Region (AnnoType)") +
+  ylab("Mean SEMA3C Expression (SCT)") +
+  ggtitle("Mean ± SEM SEMA3C Expression by Region and Timepoint") +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right"
+  )
+
+print(p_bar)
+
+ggsave("SEMA3C_MeanExpression_By_Region_Timepoint_with_SEM.png",
+       height = 5, width = 7, dpi = 300)
+
+
+ggsave("SEMA3C_MeanExpression_By_Region_Timepoint_with_SEM.svg",
+       height = 5, width = 7, dpi = 300)
+
+```
+
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(khroma)
+
+# ==============================
+# Define sample groups
+# ==============================
+samples_d0 <- c("P20063_109", "P17401_1001", "P20063_101", "P20063_105")
+samples_d1 <- c("P20063_110", "P17401_1002", "P20063_102", "P20063_106")
+samples_d7 <- c("P20063_111", "P17401_1003", "P20063_103", "P20063_107")
+samples_d30 <- c("P20063_112", "P17401_1004", "P20063_104", "P20063_108")
+
+sample_timepoint_map <- data.frame(
+  sample = c(samples_d0, samples_d1, samples_d7, samples_d30),
+  timepoint = factor(
+    c(
+      rep("D0", length(samples_d0)),
+      rep("D1", length(samples_d1)),
+      rep("D7", length(samples_d7)),
+      rep("D30", length(samples_d30))
+    ),
+    levels = c("D0", "D1", "D7", "D30")
+  )
+)
+
+# ==============================
+# Compute mean SEMA3C per sample in the region of interest
+# ==============================
+sample_means_we <- lapply(names(spatial_human), function(sample_name) {
+  if (sample_name %in% sample_timepoint_map$sample) {
+    obj <- spatial_human[[sample_name]]
+    DefaultAssay(obj) <- "SCT"
+    
+    if ("SEMA3C" %in% rownames(obj) && "AnnoType" %in% colnames(obj@meta.data)) {
+      data_mat <- FetchData(obj, vars = c("SEMA3C", "AnnoType"))
+      
+      # Select Basal_epi for D0, Wound_edges for other timepoints
+      if (sample_name %in% samples_d0) {
+        expr_vals <- data_mat$SEMA3C[data_mat$AnnoType == "Basal_epi"]
+      } else {
+        expr_vals <- data_mat$SEMA3C[data_mat$AnnoType == "Basal_epi"]
+      }
+      
+      mean_expr <- if(length(expr_vals) > 0) mean(expr_vals, na.rm = TRUE) else NA_real_
+      
+      data.frame(
+        sample = sample_name,
+        mean_expression = mean_expr
+      )
+    } else {
+      NULL
+    }
+  }
+}) %>% bind_rows()
+
+# Add timepoint info
+sample_means_we <- left_join(sample_means_we, sample_timepoint_map, by = "sample")
+
+# ==============================
+# Plot: Bar plot with mean ± SEM + sample points
+# ==============================
+timepoint_colors <- color("nightfall")(4)[1:4]
+names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+p_bar_we <- ggplot(sample_means_we, aes(x = timepoint, y = mean_expression, fill = timepoint)) +
+  stat_summary(fun = mean, geom = "bar", color = "black", width = 0.7) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  geom_jitter(width = 0.15, size = 3, color = "black") +
+  scale_fill_manual(values = timepoint_colors) +
+  xlab("Timepoint") +
+  ylab("Mean SEMA3C Expression") +
+  ggtitle("SEMA3C Expression in Wound_edges Across Timepoints (vs D0 Basal_epi)") +
+  theme_ggprism_mod(base_size = 14)
+
+# ==============================
+# Wilcoxon test vs D0 (Basal_epi)
+# ==============================
+comparisons <- list(c("D0","D1"), c("D0","D7"), c("D0","D30"))
+
+p_bar_we <- p_bar_we +
+  stat_compare_means(
+    comparisons = comparisons,
+    method = "wilcox.test",
+    label = "p.signif"
+  )
+
+print(p_bar_we)
+ggsave("SEMA3C_BasalEpi_vsD0BasalEpi_BarPlot_perSample.png", height = 5, width = 5, dpi = 300)
+ggsave("SEMA3C_BasalEpi_vsD0BasalEpi_BarPlot_perSample.svg", height = 5, width = 5, dpi = 300)
+
+```
+
+```{r}
+# ==========================
+# Setup
+# ==========================
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(khroma)
+
+# ==========================
+# Define sample groups
+# ==========================
+samples_d0 <- c("P20063_109", "P17401_1001", "P20063_101", "P20063_105")
+samples_d1 <- c("P20063_110", "P17401_1002", "P20063_102", "P20063_106")
+samples_d7 <- c("P20063_111", "P17401_1003", "P20063_103", "P20063_107")
+samples_d30 <- c("P20063_112", "P17401_1004", "P20063_104", "P20063_108")
+
+sample_timepoint_map <- data.frame(
+  sample = c(samples_d0, samples_d1, samples_d7, samples_d30),
+  timepoint = factor(
+    c(
+      rep("D0", length(samples_d0)),
+      rep("D1", length(samples_d1)),
+      rep("D7", length(samples_d7)),
+      rep("D30", length(samples_d30))
+    ),
+    levels = c("D0", "D1", "D7", "D30")
+  )
+)
+
+# ==========================
+# Define colors
+# ==========================
+timepoint_colors <- color("nightfall")(4)[1:4]
+names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+# ==========================
+# Genes of interest
+# ==========================
+genes_to_plot <- c("PLXNA4", "NRP1", "PlXNA2")
+
+# ==========================
+# Function to compute and plot
+# ==========================
+for (gene in genes_to_plot) {
+  message("Processing ", gene, "...")
+  
+  sample_means <- lapply(names(spatial_human), function(sample_name) {
+    if (sample_name %in% sample_timepoint_map$sample) {
+      obj <- spatial_human[[sample_name]]
+      DefaultAssay(obj) <- "SCT"
+      
+      if (gene %in% rownames(obj) && "AnnoType" %in% colnames(obj@meta.data)) {
+        data_mat <- FetchData(obj, vars = c(gene, "AnnoType"))
+        
+        # Basal_epi for D0, Wound_edge for others
+        if (sample_name %in% samples_d0) {
+          expr_vals <- data_mat[[gene]][data_mat$AnnoType == "Basal_epi"]
+        } else {
+          expr_vals <- data_mat[[gene]][data_mat$AnnoType == "Wound_edges"]
+        }
+        
+        mean_expr <- if (length(expr_vals) > 0) mean(expr_vals, na.rm = TRUE) else NA_real_
+        
+        data.frame(
+          sample = sample_name,
+          mean_expression = mean_expr
+        )
+      } else {
+        NULL
+      }
+    }
+  }) %>% bind_rows()
+  
+  # Add timepoint info
+  sample_means <- left_join(sample_means, sample_timepoint_map, by = "sample")
+  
+  # ==========================
+  # Plot mean ± SEM + jitter
+  # ==========================
+  p_gene <- ggplot(sample_means, aes(x = timepoint, y = mean_expression, fill = timepoint)) +
+    stat_summary(fun = mean, geom = "bar", color = "black", width = 0.7) +
+    stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+    geom_jitter(width = 0.15, size = 3, color = "black") +
+    scale_fill_manual(values = timepoint_colors) +
+    xlab("Timepoint") +
+    ylab(paste("Mean", gene, "Expression")) +
+    ggtitle(paste0(gene, " Expression in Wound Edge (vs D0 Basal_epi)")) +
+    theme_ggprism_mod(base_size = 14) +
+    stat_compare_means(
+      comparisons = list(c("D0","D1"), c("D0","D7"), c("D0","D30")),
+      method = "wilcox.test",
+      label = "p.signif"
+    )
+  
+  print(p_gene)
+  
+  # ==========================
+  # Save outputs
+  # ==========================
+  ggsave(paste0(gene, "_WoundEdge_vsD0BasalEpi_BarPlot_perSample.png"), p_gene, height = 5, width = 5, dpi = 300)
+  ggsave(paste0(gene, "_WoundEdge_vsD0BasalEpi_BarPlot_perSample.svg"), p_gene, height = 5, width = 5, dpi = 300)
+}
+
+message("✅ All plots generated successfully!")
+
+
+genes_to_plot <- c("SOX6","SEMA3C","ITGA5","MKI67","TSPEAR","IL20RA","
+                   TENM4")
+
+# ==========================
+# Function to compute and plot based on score
+# ==========================
+for (gene in genes_to_plot) {
+  message("Processing ", gene, " using BasalIV_Score1 > 0.3...")
+
+  sample_means <- lapply(names(spatial_human), function(sample_name) {
+    if (sample_name %in% sample_timepoint_map$sample) {
+      obj <- spatial_human[[sample_name]]
+      DefaultAssay(obj) <- "SCT"
+
+      # Check gene and score column exist
+      if (gene %in% rownames(obj) && "BasalIV_Score1" %in% colnames(obj@meta.data)) {
+        data_mat <- FetchData(obj, vars = c(gene, "BasalIV_Score1"))
+
+        # Select spots with score > 0.3
+        expr_vals <- data_mat[[gene]][data_mat$BasalIV_Score1 > 0.1]
+
+        mean_expr <- if (length(expr_vals) > 0) mean(expr_vals, na.rm = TRUE) else NA_real_
+
+        data.frame(
+          sample = sample_name,
+          mean_expression = mean_expr
+        )
+      } else {
+        NULL
+      }
+    }
+  }) %>% bind_rows()
+
+  # Add timepoint info
+  sample_means <- left_join(sample_means, sample_timepoint_map, by = "sample")
+
+  # ==========================
+  # Plot mean ± SEM + jitter
+  # ==========================
+  p_gene <- ggplot(sample_means, aes(x = timepoint, y = mean_expression, fill = timepoint)) +
+    stat_summary(fun = mean, geom = "bar", color = "black", width = 0.7) +
+    stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+    geom_jitter(width = 0.15, size = 3, color = "black") +
+    scale_fill_manual(values = timepoint_colors) +
+    xlab("Timepoint") +
+    ylab(paste("Mean", gene, "Expression (BasalIV_Score1 > 0.3)")) +
+    ggtitle(paste0(gene, " Expression in BasalIV-like Spots")) +
+    theme_ggprism_mod(base_size = 14) +
+    stat_compare_means(
+      comparisons = list(c("D0","D1"), c("D0","D7"), c("D0","D30")),
+      method = "wilcox.test",
+      label = "p.signif"
+    )
+
+  print(p_gene)
+
+  # ==========================
+  # Save outputs
+  # ==========================
+  ggsave(paste0(gene, "_BasalIVScore1_gt0.3_BarPlot_perSample.png"), p_gene, height = 5, width = 5, dpi = 300)
+  ggsave(paste0(gene, "_BasalIVScore1_gt0.3_BarPlot_perSample.svg"), p_gene, height = 5, width = 5, dpi = 300)
+}
+
+message("✅ All plots generated successfully!")
+
+```
+
+```{r}
+plot_gene_timecourse <- function(
+  gene,
+  spatial_obj,
+  sample_timepoint_map,
+  samples_d0,
+  anno_type = "Basal_epi",
+  assay = "SCT",
+  outdir = "."
+) {
+
+  message("Processing gene: ", gene)
+
+  # ------------------------------
+  # Compute per-sample mean
+  # ------------------------------
+  sample_means <- lapply(names(spatial_obj), function(sample_name) {
+
+    if (!sample_name %in% sample_timepoint_map$sample) return(NULL)
+
+    obj <- spatial_obj[[sample_name]]
+    DefaultAssay(obj) <- assay
+
+    if (!gene %in% rownames(obj)) return(NULL)
+    if (!"AnnoType" %in% colnames(obj@meta.data)) return(NULL)
+
+    data_mat <- FetchData(obj, vars = c(gene, "AnnoType"))
+
+    expr_vals <- data_mat[[gene]][data_mat$AnnoType == anno_type]
+
+    mean_expr <- if (length(expr_vals) > 0) {
+      mean(expr_vals, na.rm = TRUE)
+    } else {
+      NA_real_
+    }
+
+    data.frame(
+      sample = sample_name,
+      mean_expression = mean_expr
+    )
+  }) %>% bind_rows()
+
+  # Add timepoint info
+  sample_means <- left_join(
+    sample_means,
+    sample_timepoint_map,
+    by = "sample"
+  )
+
+  # ------------------------------
+  # Plot
+  # ------------------------------
+  timepoint_colors <- khroma::color("nightfall")(4)[1:4]
+  names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+  comparisons <- list(
+    c("D0", "D1"),
+    c("D0", "D7"),
+    c("D0", "D30")
+  )
+
+  p <- ggplot(
+    sample_means,
+    aes(x = timepoint, y = mean_expression, fill = timepoint)
+  ) +
+    stat_summary(fun = mean, geom = "bar", color = "black", width = 0.7) +
+    stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+    geom_jitter(width = 0.15, size = 3, color = "black") +
+    scale_fill_manual(values = timepoint_colors) +
+    labs(
+      x = "Timepoint",
+      y = paste("Mean", gene, "Expression"),
+      title = paste0(gene, " Expression in ", anno_type, " Across Timepoints")
+    ) +
+    theme_ggprism_mod(base_size = 14) +
+    stat_compare_means(
+      comparisons = comparisons,
+      method = "wilcox.test",
+      label = "p.signif"
+    )
+
+  # ------------------------------
+  # Save
+  # ------------------------------
+  ggsave(
+    file.path(outdir, paste0(gene, "_", anno_type, "_perSample.png")),
+    p,
+    height = 5,
+    width = 5,
+    dpi = 300
+  )
+
+  ggsave(
+    file.path(outdir, paste0(gene, "_", anno_type, "_perSample.svg")),
+    p,
+    height = 5,
+    width = 5
+  )
+
+  return(p)
+}
+
+
+genes_to_plot <- c(
+  "SEMA3C",
+  "SOX6",
+  "NRP1",
+  "NRP2",
+  "PLXNA4",
+  "PLXNA2",
+"SOX6","SEMA3C","ITGA5","MKI67","TSPEAR","IL20RA"
+)
+
+plots <- lapply(genes_to_plot, function(g) {
+  plot_gene_timecourse(
+    gene = g,
+    spatial_obj = spatial_human,
+    sample_timepoint_map = sample_timepoint_map,
+    samples_d0 = samples_d0,
+    anno_type = "Basal_epi",
+    outdir = "Gene_Timecourse_Plots"
+  )
+})
+
+names(plots) <- genes_to_plot
+
+
+```
+
+```{r}
+plot_gene_timecourse_global <- function(
+  gene,
+  spatial_obj,
+  sample_timepoint_map,
+  assay = "SCT",
+  outdir = "."
+) {
+
+  message("Processing gene (global): ", gene)
+
+  # ------------------------------
+  # Compute per-sample mean (ALL cells)
+  # ------------------------------
+  sample_means <- lapply(names(spatial_obj), function(sample_name) {
+
+    if (!sample_name %in% sample_timepoint_map$sample) return(NULL)
+
+    obj <- spatial_obj[[sample_name]]
+    DefaultAssay(obj) <- assay
+
+    if (!gene %in% rownames(obj)) return(NULL)
+
+    expr_vals <- FetchData(obj, vars = gene)[[gene]]
+
+    mean_expr <- if (length(expr_vals) > 0) {
+      mean(expr_vals, na.rm = TRUE)
+    } else {
+      NA_real_
+    }
+
+    data.frame(
+      sample = sample_name,
+      mean_expression = mean_expr
+    )
+  }) %>% bind_rows()
+
+  # Add timepoint info
+  sample_means <- left_join(
+    sample_means,
+    sample_timepoint_map,
+    by = "sample"
+  )
+
+  # ------------------------------
+  # Plot
+  # ------------------------------
+  timepoint_colors <- khroma::color("nightfall")(4)[1:4]
+  names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+  comparisons <- list(
+    c("D0", "D1"),
+    c("D0", "D7"),
+    c("D0", "D30")
+  )
+
+  p <- ggplot(
+    sample_means,
+    aes(x = timepoint, y = mean_expression, fill = timepoint)
+  ) +
+    stat_summary(fun = mean, geom = "bar", color = "black", width = 0.7) +
+    stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+    geom_jitter(width = 0.15, size = 3, color = "black") +
+    scale_fill_manual(values = timepoint_colors) +
+    labs(
+      x = "Timepoint",
+      y = paste("Mean", gene, "Expression"),
+      title = paste0(gene, " Global Expression Across Timepoints")
+    ) +
+    theme_ggprism_mod(base_size = 14) +
+    stat_compare_means(
+      comparisons = comparisons,
+      method = "wilcox.test",
+      label = "p.signif"
+    )
+
+  # ------------------------------
+  # Save
+  # ------------------------------
+  ggsave(
+    file.path(outdir, paste0(gene, "_Global_perSample.png")),
+    p,
+    height = 5,
+    width = 5,
+    dpi = 300
+  )
+
+  ggsave(
+    file.path(outdir, paste0(gene, "_Global_perSample.svg")),
+    p,
+    height = 5,
+    width = 5
+  )
+
+  return(p)
+}
+
+genes_to_plot <- ("TENM4")#Define genes that you want to plot here
+
+
+
+
+plots_global <- lapply(genes_to_plot, function(g) {
+  plot_gene_timecourse_global(
+    gene = g,
+    spatial_obj = spatial_human,
+    sample_timepoint_map = sample_timepoint_map,
+    outdir = "Gene_Global_Timecourse_Plots"
+  )
+})
+
+names(plots_global) <- genes_to_plot
+
+```
+
+
+```{r}
+plot_gene_timecourse <- function(
+  gene,
+  spatial_obj,
+  sample_timepoint_map,
+  samples_d0,
+  anno_type = "Wounded_edges",
+  assay = "SCT",
+  outdir = "."
+) {
+
+  message("Processing gene: ", gene)
+
+  # ------------------------------
+  # Compute per-sample mean
+  # ------------------------------
+  sample_means <- lapply(names(spatial_obj), function(sample_name) {
+
+    if (!sample_name %in% sample_timepoint_map$sample) return(NULL)
+
+    obj <- spatial_obj[[sample_name]]
+    DefaultAssay(obj) <- assay
+
+    if (!gene %in% rownames(obj)) return(NULL)
+
+    meta <- obj@meta.data
+    data_mat <- FetchData(obj, vars = gene)
+
+    # Identify timepoint
+    tp <- sample_timepoint_map$timepoint[
+      sample_timepoint_map$sample == sample_name
+    ]
+
+    # ------------------------------
+    # D0: global expression
+    # ------------------------------
+    if (tp == "D0") {
+      expr_vals <- data_mat[[gene]]
+
+    # ------------------------------
+    # Other timepoints: wound edge only
+    # ------------------------------
+    } else {
+      if (!"AnnoType" %in% colnames(meta)) return(NULL)
+
+      data_mat$AnnoType <- meta$AnnoType
+      expr_vals <- data_mat[[gene]][data_mat$AnnoType == anno_type]
+    }
+
+    mean_expr <- if (length(expr_vals) > 0) {
+      mean(expr_vals, na.rm = TRUE)
+    } else {
+      NA_real_
+    }
+
+    data.frame(
+      sample = sample_name,
+      mean_expression = mean_expr
+    )
+  }) %>% bind_rows()
+
+  # ------------------------------
+  # Add timepoint info
+  # ------------------------------
+  sample_means <- left_join(
+    sample_means,
+    sample_timepoint_map,
+    by = "sample"
+  )
+
+  # ------------------------------
+  # Plot
+  # ------------------------------
+  timepoint_colors <- khroma::color("nightfall")(4)[1:4]
+  names(timepoint_colors) <- c("D0", "D1", "D7", "D30")
+
+  comparisons <- list(
+    c("D0", "D1"),
+    c("D0", "D7"),
+    c("D0", "D30")
+  )
+
+  p <- ggplot(
+    sample_means,
+    aes(x = timepoint, y = mean_expression, fill = timepoint)
+  ) +
+    stat_summary(fun = mean, geom = "bar", color = "black", width = 0.7) +
+    stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+    geom_jitter(width = 0.15, size = 3, color = "black") +
+    scale_fill_manual(values = timepoint_colors) +
+    labs(
+      x = "Timepoint",
+      y = paste("Mean", gene, "Expression"),
+      title = paste0(
+        gene,
+        " Expression (D0 = global, others = ",
+        anno_type,
+        ")"
+      )
+    ) +
+    theme_ggprism_mod(base_size = 14) +
+    stat_compare_means(
+      comparisons = comparisons,
+      method = "wilcox.test",
+      label = "p.signif"
+    )
+
+  # ------------------------------
+  # Save
+  # ------------------------------
+  ggsave(
+    file.path(outdir, paste0(gene, "_", anno_type, "_perSample.png")),
+    p,
+    height = 5,
+    width = 5,
+    dpi = 300
+  )
+
+  ggsave(
+    file.path(outdir, paste0(gene, "_", anno_type, "_perSample.svg")),
+    p,
+    height = 5,
+    width = 5
+  )
+
+  return(p)
+}
+
+
+genes_to_plot <- c(
+  "NRP1",
+  "NRP2",
+  "PLXNA4",
+  "PLXNA2",
+"SOX6","SEMA3C","CDH13","TENM4","ITGA5","MKI67","TSPEAR","IL20RA"
+)
+
+plots <- lapply(genes_to_plot, function(g) {
+  plot_gene_timecourse(
+    gene = g,
+    spatial_obj = spatial_human,
+    sample_timepoint_map = sample_timepoint_map,
+    samples_d0 = samples_d0,
+    anno_type = "Wound_edges",
+    outdir = "Gene_Timecourse_Plots"
+  )
+})
+
+ names(plots) <- genes_to_plot
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+stress_regulon_genes <- c(
+  "ATF3", "BTG2", "CEBPB", "CEBPD", "CLDN4", "CSRNP1",
+  "DNAJA1", "DNAJB1", "DUSP1", "DUSP2", "DUSP5",
+  "EGR1", "ELF3", "FOS", "FOSB",
+  "GADD45B", "GADD45G",
+  "HSP90AA1", "HSPA1A", "HSPA1B", "HSPB1",
+  "IER2", "IER3", "IFRD1", "IRF1",
+  "JUN", "JUNB", "JUND",
+  "KLF2", "KLF4", "KLF6",
+  "MAFF", "NFKBIA", "NFKBIZ",
+  "NR4A1", "NR4A2",
+  "PHLDA2", "PIM1", "PLAUR", "PLK3",
+  "PPP1R15A", "RASD1", "RHOB", "SOCS3",
+  "TNFAIP3", "UBC", "ZFP36"
+)
+
+
+spatial_human_scored <- lapply(spatial_human, function(obj) {
+  DefaultAssay(obj) <- "SCT"
+  obj <- AddModuleScore(
+    obj,
+    features = list(stress_regulon_genes),
+    name = "StressRegulon", 
+    assay = "SCT",
+    nbin = 10
+  )
+  return(obj)
+})
+
+
+meta_df <- lapply(names(spatial_human_scored), function(sample_name) {
+  if (sample_name %in% sample_timepoint_map$sample) {
+    obj <- spatial_human_scored[[sample_name]]
+    data.frame(
+      sample = sample_name,
+      StressRegulon = obj@meta.data$StressRegulon1
+    )
+  }
+}) %>% bind_rows()
+
+meta_df <- left_join(meta_df, sample_timepoint_map, by = "sample")
+
+
+d0_mean <- meta_df %>%
+  filter(timepoint == "D0") %>%
+  summarise(mean_val = mean(StressRegulon, na.rm = TRUE)) %>%
+  pull(mean_val)
+
+meta_df <- meta_df %>%
+  mutate(StressRegulon_norm = StressRegulon / d0_mean)
+
+
+p_stress_spatial <- ggplot(
+  meta_df,
+  aes(x = timepoint, y = StressRegulon_norm, fill = timepoint)
+) +
+  geom_violin(trim = FALSE, scale = "width", alpha = 0.9) +
+  geom_jitter(width = 0.15, size = 0.6, alpha = 0.05) +
+
+  # red mean dot
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    size = 3,
+    color = "red"
+  ) +
+
+  # dashed baseline at D0 = 1
+  geom_hline(
+    yintercept = 1,
+    linetype = "dashed",
+    linewidth = 0.6
+  ) +
+
+  # stats vs D0 (no bars)
+  stat_compare_means(
+    comparisons = list(
+      c("D0", "D1"),
+      c("D0", "D7"),
+      c("D0", "D30")
+    ),
+    method = "wilcox.test",
+    label = "p.signif",
+    tip.length = 0
+  ) +
+
+  scale_fill_manual(values = timepoint_colors) +
+  labs(
+    y = "Stress Regulon Score (normalized to D0 = 1)",
+    x = NULL,
+    title = ""
+  ) +
+  theme_ggprism_mod(base_size = 14) +
+  theme(legend.position = "none")
+
+print(p_stress_spatial)
+ggsave(
+  "StressRegulon_Violin_SpatialHuman.png",
+  p_stress_spatial,
+  width = 5,
+  height = 4,
+  dpi = 300
+)
+
+ggsave(
+  "StressRegulon_Violin_SpatialHuman.svg",
+  p_stress_spatial,
+  width = 5,
+  height = 4
+)
+
+```
+
